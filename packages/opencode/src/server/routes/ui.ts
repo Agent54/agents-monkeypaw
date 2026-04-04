@@ -3,6 +3,7 @@ import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import { getMimeType } from "hono/utils/mime"
 import { createHash } from "node:crypto"
+import { Filesystem } from "@/util"
 import fs from "node:fs/promises"
 
 const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
@@ -25,7 +26,7 @@ export const UIRoutes = (): Hono =>
       const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
       if (!match) return c.json({ error: "Not Found" }, 404)
 
-      if (await fs.exists(match)) {
+      if (await Filesystem.exists(match)) {
         const mime = getMimeType(match) ?? "text/plain"
         c.header("Content-Type", mime)
         if (mime.startsWith("text/html")) {

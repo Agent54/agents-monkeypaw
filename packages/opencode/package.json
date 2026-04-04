@@ -25,19 +25,18 @@
   },
   "imports": {
     "#db": {
-      "bun": "./src/storage/db.bun.ts",
       "node": "./src/storage/db.node.ts",
-      "default": "./src/storage/db.bun.ts"
+      "default": "./src/storage/db.node.ts"
     },
     "#pty": {
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
-      "default": "./src/pty/pty.bun.ts"
+      "default": "./src/pty/pty.node.ts"
     },
     "#hono": {
       "bun": "./src/server/adapter.bun.ts",
       "node": "./src/server/adapter.node.ts",
-      "default": "./src/server/adapter.bun.ts"
+      "default": "./src/server/adapter.node.ts"
     }
   },
   "devDependencies": {
@@ -147,7 +146,7 @@
     "glob": "13.0.5",
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
-    "hono": "catalog:",
+    "hono": "4.12.10",
     "hono-openapi": "catalog:",
     "ignore": "7.0.5",
     "immer": "11.1.4",

@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, existsSync, readdirSync } from "node:fs"
+import { join } from "node:path"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
 
 const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.url))
+const monkeypaw = fileURLToPath(new URL("../../monkeypaw", import.meta.url))
 
 /**
  * @type {import("vite").PluginOption}
@@ -31,6 +33,19 @@ export default [
         '<script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>',
         `<script id="oc-theme-preload-script">${readFileSync(theme, "utf8")}</script>`,
       )
+    },
+  },
+  {
+    name: "opencode-monkeypaw",
+    transform(code, id) {
+      if (!id.endsWith("/src/index.css")) return
+      if (!existsSync(monkeypaw)) return
+      const files = readdirSync(monkeypaw)
+        .filter((f) => f.endsWith(".css"))
+        .sort()
+      if (!files.length) return
+      const imports = files.map((f) => `@import "${join(monkeypaw, f)}";`).join("\n")
+      return { code: code + "\n" + imports, map: null }
     },
   },
   tailwindcss(),

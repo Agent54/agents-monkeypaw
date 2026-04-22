@@ -1,4 +1,13 @@
 const encoder = new TextEncoder()
+let nextSessionId = 1
+
+function log(event, value) {
+  if (value === undefined) {
+    console.log(`[permission-broker] ${event}`)
+    return
+  }
+  console.log(`[permission-broker] ${event}`, value)
+}
 
 function stableValue(value) {
   if (Array.isArray(value)) return value.map(stableValue)
@@ -31,14 +40,18 @@ async function writeLine(writer, value) {
   await writer.write(encoder.encode(`${JSON.stringify(value)}\n`))
 }
 
-async function* readLines(readable) {
+async function* readLines(readable, sessionID) {
   const reader = readable.pipeThrough(new TextDecoderStream()).getReader()
   let pending = ""
 
   try {
     while (true) {
       const { done, value } = await reader.read()
-      if (done) break
+      if (done) {
+        log(`session=${sessionID} readable done`)
+        break
+      }
+      log(`session=${sessionID} chunk bytes=${value.length}`)
       pending += value
       const lines = pending.split("\n")
       pending = lines.pop() ?? ""
@@ -56,21 +69,45 @@ async function* readLines(readable) {
 }
 
 export async function handlePermissionBrokerSession(socket) {
+  const sessionID = nextSessionId++
   const writer = socket.writable.getWriter()
+  log(`session=${sessionID} opened`)
 
   try {
-    for await (const line of readLines(socket.readable)) {
-      const request = JSON.parse(line)
+    for await (const line of readLines(socket.readable, sessionID)) {
+      log(`session=${sessionID} line=${line}`)
+      let request
+      try {
+        request = JSON.parse(line)
+      } catch (error) {
+        log(`session=${sessionID} parse error`, error?.stack ?? String(error))
+        throw error
+      }
       const response = { id: request.id, result: "allow" }
 
       console.log(summarize(request))
       console.log("[permission-broker] request payload:\n" + formatJson(request))
       console.log("[permission-broker] response payload:\n" + formatJson(response))
 
-      await writeLine(writer, response)
+      try {
+        await writeLine(writer, response)
+      } catch (error) {
+        log(`session=${sessionID} write error`, error?.stack ?? String(error))
+        throw error
+      }
     }
+    log(`session=${sessionID} completed`)
+  } catch (error) {
+    log(`session=${sessionID} failed`, error?.stack ?? String(error))
+    throw error
   } finally {
     writer.releaseLock()
+    try {
+      socket.close()
+    } catch (error) {
+      log(`session=${sessionID} close error`, error?.stack ?? String(error))
+    }
+    log(`session=${sessionID} closed`)
   }
 }
 
@@ -83,6 +120,7 @@ export default {
   },
 
   async connect(socket) {
+    log("connect() invoked")
     await handlePermissionBrokerSession(socket)
   },
 }

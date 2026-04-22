@@ -5,7 +5,7 @@ FROM ubuntu:24.04 AS ubuntu-base
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ca-certificates curl git libgcc-s1 libstdc++6 ripgrep unzip \
+    && apt-get install -y --no-install-recommends bash ca-certificates curl git socat libgcc-s1 libstdc++6 ripgrep unzip \
     && rm -rf /var/lib/apt/lists/*
 
 SHELL ["/bin/bash", "-lc"]
@@ -98,6 +98,7 @@ FROM ubuntu-base
 ENV DEBIAN_FRONTEND=noninteractive \
     DENO_INSTALL=/usr/local \
     DENO_AUDIT_PERMISSIONS=/home/opencode/deno-permissions.audit.jsonl \
+    DENO_TRACE_PERMISSIONS=1 \
     HOME=/home/opencode \
     TMPDIR=/tmp/opencode \
     DENO_DIR=/home/opencode/cache/deno \
@@ -139,4 +140,4 @@ USER opencode
 
 WORKDIR /home/opencode/workspaces
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["deno", "run", "--unstable-permission-broker", "--config", "/home/opencode/app/packages/opencode/deno.jsonc", "--sloppy-imports", "/home/opencode/app/packages/opencode/dist/deno/src/index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0"]
+CMD ["deno", "run", "--config", "/home/opencode/app/packages/opencode/deno.jsonc", "--sloppy-imports", "/home/opencode/app/packages/opencode/dist/deno/src/index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0"]

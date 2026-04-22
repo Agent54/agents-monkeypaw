@@ -1,1 +1,0 @@
-{"v":1,"datetime":"2026-04-22T14:05:21Z","permission":"read","value":"permission-broker.workerd.js","stack":["op_fs_read_file_text_async (ext:core/00_infra.js:267:44)","Object.readTextFile (ext:deno_fs/30_fs.js:814:24)","file:///Users/jan/Dev/xe/stacks/agents/opencode/packages/opencode/monkeypaw/$deno$eval.mts:1:12"]}

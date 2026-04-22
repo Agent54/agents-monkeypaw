@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 FROM ubuntu:24.04 AS ubuntu-base
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -57,10 +59,39 @@ RUN set -euo pipefail; \
 
 WORKDIR /src
 
+COPY package.json bun.lock bunfig.toml tsconfig.json turbo.json /src/
+COPY patches /src/patches
+COPY packages/app/package.json /src/packages/app/
+COPY packages/console/app/package.json /src/packages/console/app/
+COPY packages/console/core/package.json /src/packages/console/core/
+COPY packages/console/function/package.json /src/packages/console/function/
+COPY packages/console/mail/package.json /src/packages/console/mail/
+COPY packages/console/resource/package.json /src/packages/console/resource/
+COPY packages/desktop/package.json /src/packages/desktop/
+COPY packages/desktop-electron/package.json /src/packages/desktop-electron/
+COPY packages/enterprise/package.json /src/packages/enterprise/
+COPY packages/function/package.json /src/packages/function/
+COPY packages/opencode/package.json packages/opencode/tsconfig.json /src/packages/opencode/
+COPY packages/plugin/package.json packages/plugin/tsconfig.json /src/packages/plugin/
+COPY packages/script/package.json /src/packages/script/
+COPY packages/shared/package.json /src/packages/shared/
+COPY packages/sdk/js/package.json packages/sdk/js/tsconfig.json /src/packages/sdk/js/
+COPY packages/slack/package.json /src/packages/slack/
+COPY packages/storybook/package.json /src/packages/storybook/
+COPY packages/ui/package.json /src/packages/ui/
+COPY packages/web/package.json /src/packages/web/
+
+RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
+  bun install --frozen-lockfile --ignore-scripts
+
 COPY . /src
 
-RUN bun install --frozen-lockfile
-RUN cd packages/opencode && bun run script/deno-build.ts --single
+RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
+  bun install --frozen-lockfile
+
+RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
+  --mount=type=cache,target=/root/.cache,sharing=locked \
+  cd packages/opencode && bun run script/deno-build.ts --single
 
 FROM ubuntu-base
 
@@ -83,23 +114,27 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN curl -fsSL https://deno.land/install.sh | sh
 
-COPY --from=landlock-builder /build/landlock-restrict /usr/local/bin/landlock-restrict
-COPY packages/opencode/monkeypaw/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY --from=deno-build /src/packages/opencode/deno.jsonc /home/opencode/app/packages/opencode/deno.jsonc
-COPY --from=deno-build /src/packages/opencode/deno-shims /home/opencode/app/packages/opencode/deno-shims
-COPY --from=deno-build /src/packages/opencode/dist/deno /home/opencode/app/packages/opencode/dist/deno
-
-RUN chmod +x /usr/local/bin/entrypoint.sh \
-    && groupadd --system opencode \
+RUN groupadd --system opencode \
     && useradd --system --gid opencode --home-dir /home/opencode --create-home --shell /bin/bash opencode \
     && mkdir -p /home/opencode/config/opencode /home/opencode/cache/opencode /home/opencode/cache/deno \
         /home/opencode/share/opencode /home/opencode/state/opencode /home/opencode/workspaces/worktree /tmp/opencode \
     && ln -sfn /home/opencode/workspaces/worktree /home/opencode/share/opencode/worktree \
     && chown -R opencode:opencode /home/opencode /tmp/opencode
 
+COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/deno.jsonc /home/opencode/app/packages/opencode/deno.jsonc
+COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/deno-shims /home/opencode/app/packages/opencode/deno-shims
+COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/dist/deno /home/opencode/app/packages/opencode/dist/deno
+
 USER opencode
 
 RUN deno cache --quiet --config /home/opencode/app/packages/opencode/deno.jsonc /home/opencode/app/packages/opencode/dist/deno/src/index-deno.js
+
+USER root
+
+COPY --from=landlock-builder /build/landlock-restrict /usr/local/bin/landlock-restrict
+COPY --chmod=755 packages/opencode/monkeypaw/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+USER opencode
 
 WORKDIR /home/opencode/workspaces
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

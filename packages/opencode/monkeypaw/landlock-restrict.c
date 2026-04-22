@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -103,6 +104,21 @@ static int probe_abi(void)
     return -EXIT_UNSUPPORTED;
 }
 
+static __u64 path_access(int fd, __u64 access)
+{
+    struct stat statbuf;
+    if (fstat(fd, &statbuf) != 0)
+        return access;
+
+    if (S_ISDIR(statbuf.st_mode))
+        return access;
+
+    return access & (LANDLOCK_ACCESS_FS_READ_FILE |
+                     LANDLOCK_ACCESS_FS_WRITE_FILE |
+                     LANDLOCK_ACCESS_FS_EXECUTE |
+                     LANDLOCK_ACCESS_FS_TRUNCATE);
+}
+
 static int add_path_rule(int ruleset_fd, const char *path, __u64 access)
 {
     int fd = open(path, O_PATH | O_CLOEXEC);
@@ -113,7 +129,7 @@ static int add_path_rule(int ruleset_fd, const char *path, __u64 access)
     }
 
     struct landlock_path_beneath_attr attr = {
-        .allowed_access = access,
+        .allowed_access = path_access(fd, access),
         .parent_fd = fd,
     };
 

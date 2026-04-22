@@ -46,7 +46,6 @@ apply_resource_limits() {
   ulimit -n 4096 2>/dev/null || true
   ulimit -u 256 2>/dev/null || true
   ulimit -f 1048576 2>/dev/null || true
-  ulimit -v 4194304 2>/dev/null || true
 }
 
 prepare_runtime() {
@@ -83,8 +82,11 @@ apply_landlock() {
   append_if_exists rx /lib
   append_if_exists rx /lib64
 
+  append_if_exists ro /home/opencode
   append_if_exists ro /etc/ssl
   append_if_exists ro /etc/ca-certificates
+  append_if_exists ro /etc/profile
+  append_if_exists ro /etc/bash.bashrc
   append_if_exists ro /etc/resolv.conf
   append_if_exists ro /etc/hosts
   append_if_exists ro /etc/nsswitch.conf
@@ -95,6 +97,14 @@ apply_landlock() {
   append_if_exists ro /etc/ld.so.conf.d
   append_if_exists ro /etc/ld-musl-x86_64.path
   append_if_exists ro /etc/ld-musl-aarch64.path
+  append_if_exists ro /proc/version
+  append_if_exists ro /proc/sys/kernel/osrelease
+  # append_if_exists ro /proc/sys/fs/binfmt_misc/WSLInterop
+
+  append_if_exists rw /dev/null
+  append_if_exists rw /dev/urandom
+  append_if_exists rw /dev/random
+  append_if_exists rw /dev/tty
 
   export LANDLOCK_RX="$(join_paths rx)"
   export LANDLOCK_RO="$(join_paths ro)"

@@ -6,8 +6,56 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY monkeypaw/landlock-restrict.c /build/landlock-restrict.c
+COPY packages/opencode/monkeypaw/landlock-restrict.c /build/landlock-restrict.c
 RUN cc -static -Os -s -o /build/landlock-restrict /build/landlock-restrict.c
+
+FROM ubuntu:24.04 AS deno-build
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    openssh-client \
+    pkg-config \
+    python3 \
+    unzip \
+    xz-utils \
+    zip \
+  && rm -rf /var/lib/apt/lists/*
+
+SHELL ["/bin/bash", "-lc"]
+
+ARG NODE_VERSION=24.4.0
+ARG BUN_VERSION=1.3.11
+
+ENV BUN_INSTALL=/opt/bun
+ENV PATH=/opt/bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+RUN set -euo pipefail; \
+  arch=$(uname -m); \
+  node_arch=x64; \
+  if [ "$arch" = "aarch64" ]; then node_arch=arm64; fi; \
+  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" \
+  | tar -xJf - -C /usr/local --strip-components=1; \
+  corepack enable
+
+RUN set -euo pipefail; \
+  curl -fsSL https://bun.sh/install | bash -s -- "bun-v${BUN_VERSION}"; \
+  bun --version; \
+  node --version; \
+  npm --version
+
+WORKDIR /src
+
+COPY . /src
+
+RUN bun install --frozen-lockfile
+RUN cd packages/opencode && bun run script/deno-build.ts --single
 
 FROM ubuntu:24.04
 
@@ -32,15 +80,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates curl git libgcc-s1 libstdc++6 ripgrep unzip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://deno.land/install.sh | sh \
-    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://deno.land/install.sh | sh
 
 COPY --from=landlock-builder /build/landlock-restrict /usr/local/bin/landlock-restrict
-COPY monkeypaw/entrypoint.sh /usr/local/bin/entrypoint.sh
-
-COPY deno.jsonc /home/opencode/app/packages/opencode/deno.jsonc
-COPY deno-shims /home/opencode/app/packages/opencode/deno-shims
-COPY dist/deno /home/opencode/app/packages/opencode/dist/deno
+COPY packages/opencode/monkeypaw/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --from=deno-build /src/packages/opencode/deno.jsonc /home/opencode/app/packages/opencode/deno.jsonc
+COPY --from=deno-build /src/packages/opencode/deno-shims /home/opencode/app/packages/opencode/deno-shims
+COPY --from=deno-build /src/packages/opencode/dist/deno /home/opencode/app/packages/opencode/dist/deno
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     && groupadd --system opencode \

@@ -242,6 +242,8 @@ for (const item of targets) {
           build.onResolve({ filter: /^bun-pty$/ }, () => ({ path: path.join(dir, "deno-shims/bun-pty.ts") }))
   
           build.onResolve({ filter: /^bun$/ }, () => ({ path: path.join(dir, "deno-shims/bun.ts") }))
+
+          build.onResolve({ filter: /^open$/ }, () => ({ path: path.join(dir, "deno-shims/open.ts") }))
         },
       }
     ],

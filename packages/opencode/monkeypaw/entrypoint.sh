@@ -97,9 +97,6 @@ apply_landlock() {
   append_if_exists ro /etc/ld.so.conf.d
   append_if_exists ro /etc/ld-musl-x86_64.path
   append_if_exists ro /etc/ld-musl-aarch64.path
-  append_if_exists ro /proc/version
-  append_if_exists ro /proc/sys/kernel/osrelease
-  # append_if_exists ro /proc/sys/fs/binfmt_misc/WSLInterop
 
   append_if_exists rw /dev/null
   append_if_exists rw /dev/urandom

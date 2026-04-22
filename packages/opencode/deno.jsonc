@@ -30,7 +30,7 @@
     "@opencode-ai/plugin": "./packages/plugin/src/index.ts",
     "@opencode-ai/plugin/": "./packages/plugin/src/",
     "diff": "npm:diff",
-    "open": "npm:open",
+    "open": "./deno-shims/open.ts",
     "async_hooks": "node:async_hooks",
     "vscode-jsonrpc": "npm:vscode-jsonrpc",
     "@parcel": "npm:@parcel",

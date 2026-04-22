@@ -10,8 +10,12 @@ readonly temp_dir="${TMPDIR:-/tmp/opencode}"
 readonly deno_dir="${DENO_DIR:-/home/opencode/cache/deno}"
 readonly app_root="${OPENCODE_APP_ROOT:-/home/opencode/app/packages/opencode}"
 readonly audit_file="${DENO_AUDIT_PERMISSIONS:-/home/opencode/deno-permissions.audit.jsonl}"
+readonly broker_socket="${DENO_PERMISSION_BROKER_PATH:-/home/opencode/monkeypaw/permission-broker.sock}"
 readonly global_config_dir="${XDG_CONFIG_HOME:-/home/opencode/config}/opencode"
 export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-/home/opencode/config/opencode}"
+export DENO_AUDIT_PERMISSIONS="${DENO_AUDIT_PERMISSIONS:-$audit_file}"
+export DENO_TRACE_PERMISSIONS="${DENO_TRACE_PERMISSIONS:-1}"
+export DENO_PERMISSION_BROKER_PATH="${DENO_PERMISSION_BROKER_PATH:-$broker_socket}"
 
 require_dir() {
   if [ -d "$1" ]; then
@@ -27,6 +31,14 @@ require_writable_dir() {
     return
   fi
   echo "[security] directory is not writable: $1" >&2
+  exit 1
+}
+
+require_socket() {
+  if [ -S "$1" ]; then
+    return
+  fi
+  echo "[security] missing unix socket: $1" >&2
   exit 1
 }
 
@@ -59,6 +71,7 @@ prepare_runtime() {
   require_writable_dir "$deno_dir"
   require_writable_dir "$temp_dir"
   touch "$audit_file"
+  require_socket "$broker_socket"
   require_dir "$global_config_dir"
   require_dir "$OPENCODE_CONFIG_DIR"
   require_dir "$app_root"
@@ -76,7 +89,7 @@ prepare_runtime() {
 apply_landlock() {
   local rx=()
   local ro=("$app_root")
-  local rw=("$workspace_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir" "$audit_file")
+  local rw=("$workspace_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir" "$audit_file" "$broker_socket")
 
   append_if_exists rx /usr
   append_if_exists rx /bin
@@ -115,7 +128,7 @@ apply_landlock() {
   exec /usr/local/bin/landlock-restrict "$@"
 }
 
-echo "[security] OpenCode security entrypoint starting"
+echo "[security] OpenCode secure entrypoint starting"
 echo "[security] PID=$$ UID=$(id -u) GID=$(id -g)"
 
 apply_resource_limits

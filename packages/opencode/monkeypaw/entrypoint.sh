@@ -7,6 +7,8 @@ readonly data_dir="${OPENCODE_DATA_DIR:-/home/opencode/share/opencode}"
 readonly state_dir="${OPENCODE_STATE_DIR:-/home/opencode/state/opencode}"
 readonly cache_dir="${OPENCODE_CACHE_DIR:-/home/opencode/cache/opencode}"
 readonly temp_dir="${TMPDIR:-/tmp/opencode}"
+readonly deno_dir="${DENO_DIR:-/home/opencode/cache/deno}"
+readonly app_root="${OPENCODE_APP_ROOT:-/home/opencode/app/packages/opencode}"
 readonly global_config_dir="${XDG_CONFIG_HOME:-/home/opencode/config}/opencode"
 export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-/home/opencode/config/opencode}"
 
@@ -54,9 +56,11 @@ prepare_runtime() {
   require_writable_dir "$data_dir"
   require_writable_dir "$state_dir"
   require_writable_dir "$cache_dir"
+  require_writable_dir "$deno_dir"
   require_writable_dir "$temp_dir"
   require_dir "$global_config_dir"
   require_dir "$OPENCODE_CONFIG_DIR"
+  require_dir "$app_root"
   if [ ! -e "$data_dir/worktree" ]; then
     ln -s "$worktree_root" "$data_dir/worktree"
     return
@@ -70,8 +74,8 @@ prepare_runtime() {
 
 apply_landlock() {
   local rx=(/usr /bin /sbin /lib /lib64)
-  local ro=("$OPENCODE_CONFIG_DIR" "$global_config_dir")
-  local rw=("$workspace_root" "$data_dir" "$state_dir" "$cache_dir" "$temp_dir")
+  local ro=("$app_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir")
+  local rw=("$workspace_root" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir")
 
   append_if_exists ro /etc/ssl
   append_if_exists ro /etc/ca-certificates

@@ -1,5 +1,5 @@
 import type { Hono } from "hono"
-import { upgradeWebSocket } from "../../hono-deno.ts"
+import { upgradeWebSocket } from "../../deno-shims/hono-deno.ts"
 import type { Adapter } from "./adapter"
 
 export const adapter: Adapter = {

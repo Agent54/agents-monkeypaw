@@ -225,18 +225,18 @@ await Bun.build({
       name: "deno-alias",
       setup(build) {
         build.onResolve({ filter: /^bun:ffi$/ }, (...args) => {
-          return { path: path.join(dir, "bun-ffi-shim.ts") };
+          return { path: path.join(dir, "deno-shims/bun-ffi.ts") };
         })
 
         build.onResolve({ filter: /^hono\/bun$/ }, () => ({
-          path: path.join(dir, "hono-deno.ts") 
+          path: path.join(dir, "deno-shims/hono-deno.ts")
         }))
 
-        build.onResolve({ filter: /^bun:sqlite$/ }, () => ({ path: path.join(dir, "bun-sqlite-shim.ts") }))
+        build.onResolve({ filter: /^bun:sqlite$/ }, () => ({ path: path.join(dir, "deno-shims/bun-sqlite.ts") }))
 
-        build.onResolve({ filter: /^bun-pty$/ }, () => ({ path: path.join(dir, "bun-pty-shim.ts") }))
+        build.onResolve({ filter: /^bun-pty$/ }, () => ({ path: path.join(dir, "deno-shims/bun-pty.ts") }))
 
-        build.onResolve({ filter: /^bun$/ }, () => ({ path: path.join(dir, "bun-shim.ts") }))
+        build.onResolve({ filter: /^bun$/ }, () => ({ path: path.join(dir, "deno-shims/bun.ts") }))
       },
     }
   ],

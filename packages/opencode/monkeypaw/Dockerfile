@@ -39,13 +39,7 @@ COPY --from=landlock-builder /build/landlock-restrict /usr/local/bin/landlock-re
 COPY monkeypaw/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 COPY deno.jsonc /home/opencode/app/packages/opencode/deno.jsonc
-COPY bun-global.ts /home/opencode/app/packages/opencode/bun-global.ts
-COPY bun-shim.ts /home/opencode/app/packages/opencode/bun-shim.ts
-COPY bun-ffi-shim.ts /home/opencode/app/packages/opencode/bun-ffi-shim.ts
-COPY bun-pty-shim.ts /home/opencode/app/packages/opencode/bun-pty-shim.js
-COPY bun-sqlite-shim.ts /home/opencode/app/packages/opencode/bun-sqlite-shim.ts
-COPY fs-promises-shim.ts /home/opencode/app/packages/opencode/fs-promises-shim.ts
-COPY hono-deno.ts /home/opencode/app/packages/opencode/hono-deno.ts
+COPY deno-shims /home/opencode/app/packages/opencode/deno-shims
 COPY dist/deno /home/opencode/app/packages/opencode/dist/deno
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \

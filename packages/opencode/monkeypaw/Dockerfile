@@ -97,6 +97,8 @@ FROM ubuntu-base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DENO_INSTALL=/usr/local \
+    DENO_AUDIT_PERMISSIONS=/home/opencode/deno-permissions.audit.jsonl \
+    DENO_TRACE_PERMISSIONS=1 \
     HOME=/home/opencode \
     TMPDIR=/tmp/opencode \
     DENO_DIR=/home/opencode/cache/deno \
@@ -138,4 +140,4 @@ USER opencode
 
 WORKDIR /home/opencode/workspaces
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["deno", "run", "--config", "/home/opencode/app/packages/opencode/deno.jsonc", "--allow-run=git,rg", "--deny-run=open,deno", "--allow-env", "--allow-ffi", "--allow-sys", "--allow-read=/home/opencode/app,/home/opencode/config,/home/opencode/share,/home/opencode/state,/home/opencode/cache,/home/opencode/workspaces,/tmp/opencode,/usr,/bin,/sbin,/lib,/lib64", "--allow-write=/home/opencode/share/opencode,/home/opencode/state/opencode,/home/opencode/cache/opencode,/home/opencode/cache/deno,/home/opencode/workspaces,/tmp/opencode", "--allow-net=models.dev:443,0.0.0.0:4097,opencode.ai:443,104.16.7.34:443", "--sloppy-imports", "/home/opencode/app/packages/opencode/dist/deno/src/index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0"]
+CMD ["deno", "run", "--config", "/home/opencode/app/packages/opencode/deno.jsonc", "--allow-run=git,rg", "--deny-run=open,deno", "--allow-env", "--allow-ffi", "--allow-sys", "--allow-read=/home/opencode/app,/home/opencode/config,/home/opencode/share,/home/opencode/state,/home/opencode/cache,/home/opencode/workspaces,/tmp/opencode,/usr,/bin,/sbin,/lib,/lib64", "--allow-write=/home/opencode/deno-permissions.audit.jsonl,/home/opencode/config/opencode,/home/opencode/share/opencode,/home/opencode/state/opencode,/home/opencode/cache/opencode,/home/opencode/cache/deno,/home/opencode/workspaces,/tmp/opencode", "--allow-net=models.dev:443,0.0.0.0:4097,opencode.ai:443,104.16.7.34:443", "--sloppy-imports", "/home/opencode/app/packages/opencode/dist/deno/src/index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0"]

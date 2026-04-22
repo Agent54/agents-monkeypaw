@@ -9,6 +9,7 @@ readonly cache_dir="${OPENCODE_CACHE_DIR:-/home/opencode/cache/opencode}"
 readonly temp_dir="${TMPDIR:-/tmp/opencode}"
 readonly deno_dir="${DENO_DIR:-/home/opencode/cache/deno}"
 readonly app_root="${OPENCODE_APP_ROOT:-/home/opencode/app/packages/opencode}"
+readonly audit_file="${DENO_AUDIT_PERMISSIONS:-/home/opencode/deno-permissions.audit.jsonl}"
 readonly global_config_dir="${XDG_CONFIG_HOME:-/home/opencode/config}/opencode"
 export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-/home/opencode/config/opencode}"
 
@@ -57,6 +58,7 @@ prepare_runtime() {
   require_writable_dir "$cache_dir"
   require_writable_dir "$deno_dir"
   require_writable_dir "$temp_dir"
+  touch "$audit_file"
   require_dir "$global_config_dir"
   require_dir "$OPENCODE_CONFIG_DIR"
   require_dir "$app_root"
@@ -73,8 +75,8 @@ prepare_runtime() {
 
 apply_landlock() {
   local rx=()
-  local ro=("$app_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir")
-  local rw=("$workspace_root" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir")
+  local ro=("$app_root")
+  local rw=("$workspace_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir" "$audit_file")
 
   append_if_exists rx /usr
   append_if_exists rx /bin

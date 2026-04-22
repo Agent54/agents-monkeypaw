@@ -73,9 +73,15 @@ prepare_runtime() {
 }
 
 apply_landlock() {
-  local rx=(/usr /bin /sbin /lib /lib64)
+  local rx=()
   local ro=("$app_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir")
   local rw=("$workspace_root" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir")
+
+  append_if_exists rx /usr
+  append_if_exists rx /bin
+  append_if_exists rx /sbin
+  append_if_exists rx /lib
+  append_if_exists rx /lib64
 
   append_if_exists ro /etc/ssl
   append_if_exists ro /etc/ca-certificates

@@ -1,34 +1,39 @@
-FROM ubuntu:24.04 AS landlock-builder
+FROM ubuntu:24.04 AS ubuntu-base
 
-ENV DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential linux-libc-dev \
+    && apt-get install -y --no-install-recommends bash ca-certificates curl git libgcc-s1 libstdc++6 ripgrep unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+SHELL ["/bin/bash", "-lc"]
+
+FROM ubuntu-base AS ubuntu-build-base
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM ubuntu-build-base AS landlock-builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY packages/opencode/monkeypaw/landlock-restrict.c /build/landlock-restrict.c
 RUN cc -static -Os -s -o /build/landlock-restrict /build/landlock-restrict.c
 
-FROM ubuntu:24.04 AS deno-build
-
-ARG DEBIAN_FRONTEND=noninteractive
+FROM ubuntu-build-base AS deno-build
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    build-essential \
-    ca-certificates \
-    curl \
-    git \
     jq \
     openssh-client \
     pkg-config \
     python3 \
-    unzip \
     xz-utils \
     zip \
   && rm -rf /var/lib/apt/lists/*
-
-SHELL ["/bin/bash", "-lc"]
 
 ARG NODE_VERSION=24.4.0
 ARG BUN_VERSION=1.3.11
@@ -57,7 +62,7 @@ COPY . /src
 RUN bun install --frozen-lockfile
 RUN cd packages/opencode && bun run script/deno-build.ts --single
 
-FROM ubuntu:24.04
+FROM ubuntu-base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DENO_INSTALL=/usr/local \
@@ -75,10 +80,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OPENCODE_DATA_DIR=/home/opencode/share/opencode \
     OPENCODE_STATE_DIR=/home/opencode/state/opencode \
     OPENCODE_CACHE_DIR=/home/opencode/cache/opencode
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ca-certificates curl git libgcc-s1 libstdc++6 ripgrep unzip \
-    && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deno.land/install.sh | sh
 

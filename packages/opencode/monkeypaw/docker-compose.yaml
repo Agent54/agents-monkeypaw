@@ -1,0 +1,30 @@
+services:
+  proxy:
+    image: opencode-monkeypaw-proxy:local
+    build:
+      context: ../../..
+      dockerfile: packages/opencode/monkeypaw/proxy/Dockerfile
+    volumes:
+      - proxy-internal:/sockets/internal
+      - type: bind
+        source: /tmp/opencode-monkeypaw-proxy
+        target: /sockets/external
+
+  agent:
+    image: opencode-monkeypaw-agent:local
+    build:
+      context: ../../..
+      dockerfile: packages/opencode/monkeypaw/Dockerfile
+    depends_on:
+      - proxy
+    environment:
+      DENO_PERMISSION_BROKER_PATH: /tmp/opencode-proxy/permission-broker.sock
+    ports:
+      - "4097:4097"
+    volumes:
+      - ../../..:/home/opencode/workspaces/repo
+      - proxy-internal:/tmp/opencode-proxy
+    working_dir: /home/opencode/workspaces/repo
+
+volumes:
+  proxy-internal:

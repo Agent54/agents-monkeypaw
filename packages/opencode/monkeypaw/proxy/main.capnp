@@ -2,29 +2,30 @@ using Workerd = import "/workerd/workerd.capnp";
 
 const config :Workerd.Config = (
   services = [
-    (name = "permission-broker", worker = .permissionBroker),
+    (name = "proxy", worker = .proxyWorker),
   ],
 
   sockets = [
     (
-      name = "permissionBroker",
-      # NOTE:
-      # Raw permission-broker traffic is newline-delimited JSON over a unix stream socket.
-      # Bind the socket path at runtime with:
-      #   --socket-addr permissionBroker=unix:$PWD/permission-broker.sock
+      name = "internalBroker",
       tcp = (),
-      service = "permission-broker",
+      service = (name = "proxy", entrypoint = "permissionBroker"),
+    ),
+    (
+      name = "externalHttp",
+      http = (),
+      service = (name = "proxy", entrypoint = "debugHttp"),
     ),
   ],
 );
 
-const permissionBroker :Workerd.Worker = (
+const proxyWorker :Workerd.Worker = (
   modules = [
     (
-      name = "permission-broker.workerd",
-      esModule = embed "permission-broker.workerd.js",
+      name = "main",
+      esModule = embed "main.js",
     ),
   ],
   compatibilityFlags = ["nodejs_compat_v2", "experimental"],
-  compatibilityDate = "2026-04-22",
+  compatibilityDate = "2026-04-23",
 );

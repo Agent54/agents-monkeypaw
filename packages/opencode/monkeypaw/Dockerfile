@@ -1,14 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
-FROM ubuntu:24.04 AS ubuntu-base
-
-ARG DEBIAN_FRONTEND=noninteractive
+ARG BASE_IMAGE=opencode-monkeypaw-base:local
+FROM ${BASE_IMAGE} AS ubuntu-base
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ca-certificates curl git socat libgcc-s1 libstdc++6 ripgrep unzip \
+    && apt-get install -y --no-install-recommends git socat libgcc-s1 libstdc++6 ripgrep unzip \
     && rm -rf /var/lib/apt/lists/*
-
-SHELL ["/bin/bash", "-lc"]
 
 FROM ubuntu-base AS ubuntu-build-base
 
@@ -62,24 +59,12 @@ WORKDIR /src
 COPY package.json bun.lock bunfig.toml tsconfig.json turbo.json /src/
 COPY patches /src/patches
 COPY packages/app/package.json /src/packages/app/
-COPY packages/console/app/package.json /src/packages/console/app/
-COPY packages/console/core/package.json /src/packages/console/core/
-COPY packages/console/function/package.json /src/packages/console/function/
-COPY packages/console/mail/package.json /src/packages/console/mail/
-COPY packages/console/resource/package.json /src/packages/console/resource/
-COPY packages/desktop/package.json /src/packages/desktop/
-COPY packages/desktop-electron/package.json /src/packages/desktop-electron/
-COPY packages/enterprise/package.json /src/packages/enterprise/
-COPY packages/function/package.json /src/packages/function/
 COPY packages/opencode/package.json packages/opencode/tsconfig.json /src/packages/opencode/
 COPY packages/plugin/package.json packages/plugin/tsconfig.json /src/packages/plugin/
 COPY packages/script/package.json /src/packages/script/
 COPY packages/shared/package.json /src/packages/shared/
 COPY packages/sdk/js/package.json packages/sdk/js/tsconfig.json /src/packages/sdk/js/
 COPY packages/slack/package.json /src/packages/slack/
-COPY packages/storybook/package.json /src/packages/storybook/
-COPY packages/ui/package.json /src/packages/ui/
-COPY packages/web/package.json /src/packages/web/
 
 RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
   bun install --frozen-lockfile --ignore-scripts

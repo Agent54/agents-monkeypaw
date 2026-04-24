@@ -50,9 +50,11 @@ RUN set -euo pipefail; \
 
 RUN set -euo pipefail; \
   curl -fsSL https://bun.sh/install | bash -s -- "bun-v${BUN_VERSION}"; \
+  npm install -g node-gyp; \
   bun --version; \
   node --version; \
-  npm --version
+  npm --version; \
+  node-gyp --version
 
 WORKDIR /src
 
@@ -65,9 +67,7 @@ COPY packages/script/package.json /src/packages/script/
 COPY packages/shared/package.json /src/packages/shared/
 COPY packages/sdk/js/package.json packages/sdk/js/tsconfig.json /src/packages/sdk/js/
 COPY packages/slack/package.json /src/packages/slack/
-
-RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
-  bun install --frozen-lockfile --ignore-scripts
+COPY packages/ui/package.json /src/packages/ui/
 
 COPY . /src
 
@@ -125,4 +125,4 @@ USER opencode
 
 WORKDIR /home/opencode/workspaces
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["deno", "run", "--config", "/home/opencode/app/packages/opencode/deno.jsonc", "--sloppy-imports", "/home/opencode/app/packages/opencode/dist/deno/src/index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0"]
+CMD ["deno", "run", "--config", "/home/opencode/app/packages/opencode/deno.jsonc", "--sloppy-imports", "/home/opencode/app/packages/opencode/dist/deno/src/index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0", "serve"]

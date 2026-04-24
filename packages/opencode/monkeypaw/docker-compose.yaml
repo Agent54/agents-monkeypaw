@@ -1,4 +1,12 @@
 services:
+  base:
+    profiles:
+      - build
+    image: opencode-monkeypaw-base:local
+    build:
+      context: ../../..
+      dockerfile: packages/opencode/monkeypaw/base.Dockerfile
+
   proxy:
     image: opencode-monkeypaw-proxy:local
     build:

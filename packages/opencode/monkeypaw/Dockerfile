@@ -34,45 +34,52 @@ RUN apt-get update \
     zip \
   && rm -rf /var/lib/apt/lists/*
 
-ARG NODE_VERSION=24.4.0
 ARG BUN_VERSION=1.3.11
 
 ENV BUN_INSTALL=/opt/bun
 ENV PATH=/opt/bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN set -euo pipefail; \
-  arch=$(uname -m); \
-  node_arch=x64; \
-  if [ "$arch" = "aarch64" ]; then node_arch=arm64; fi; \
-  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" \
-  | tar -xJf - -C /usr/local --strip-components=1; \
-  corepack enable
-
-RUN set -euo pipefail; \
   curl -fsSL https://bun.sh/install | bash -s -- "bun-v${BUN_VERSION}"; \
-  npm install -g node-gyp; \
+  printf '#!/bin/sh\nexec bun --bun "$@"\n' > "${BUN_INSTALL}/bin/node"; \
+  chmod +x "${BUN_INSTALL}/bin/node"; \
+  bun install -g node-gyp; \
   bun --version; \
-  node --version; \
-  npm --version; \
   node-gyp --version
 
 WORKDIR /src
 
 COPY package.json bun.lock bunfig.toml tsconfig.json turbo.json /src/
 COPY patches /src/patches
+
+# Bun validates the frozen lockfile against the full workspace graph from the
+# root package.json, so copy every workspace manifest even when monkeypaw only
+# builds the opencode package.
 COPY packages/app/package.json /src/packages/app/
+COPY packages/console/app/package.json /src/packages/console/app/
+COPY packages/console/core/package.json /src/packages/console/core/
+COPY packages/console/function/package.json /src/packages/console/function/
+COPY packages/console/mail/package.json /src/packages/console/mail/
+COPY packages/console/resource/package.json /src/packages/console/resource/
+COPY packages/desktop/package.json /src/packages/desktop/
+COPY packages/desktop-electron/package.json /src/packages/desktop-electron/
+COPY packages/enterprise/package.json /src/packages/enterprise/
+COPY packages/function/package.json /src/packages/function/
 COPY packages/opencode/package.json packages/opencode/tsconfig.json /src/packages/opencode/
+COPY packages/opencode/script/fix-node-pty.ts /src/packages/opencode/script/fix-node-pty.ts
 COPY packages/plugin/package.json packages/plugin/tsconfig.json /src/packages/plugin/
 COPY packages/script/package.json /src/packages/script/
 COPY packages/shared/package.json /src/packages/shared/
 COPY packages/sdk/js/package.json packages/sdk/js/tsconfig.json /src/packages/sdk/js/
 COPY packages/slack/package.json /src/packages/slack/
+COPY packages/storybook/package.json /src/packages/storybook/
 COPY packages/ui/package.json /src/packages/ui/
-
-COPY . /src
+COPY packages/web/package.json /src/packages/web/
 
 RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
   bun install --frozen-lockfile
+
+COPY . /src
 
 RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
   --mount=type=cache,target=/root/.cache,sharing=locked \
@@ -93,7 +100,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     XDG_STATE_HOME=/home/opencode/state \
     OPENCODE_APP_ROOT=/home/opencode/app \
     OPENCODE_CONFIG_DIR=/home/opencode/config/opencode \
-    OPENCODE_LAUNCH_CWD=/home/opencode/app \
+    OPENCODE_LAUNCH_CWD=/home/opencode/app/dist/deno/src \
     OPENCODE_WORKSPACE_ROOT=/home/opencode/workspaces \
     OPENCODE_WORKTREE_ROOT=/home/opencode/workspaces/worktree \
     OPENCODE_DATA_DIR=/home/opencode/share/opencode \
@@ -111,11 +118,12 @@ RUN groupadd --system opencode \
 
 COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/deno.jsonc /home/opencode/app/deno.jsonc
 COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/deno-shims /home/opencode/app/deno-shims
-COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/dist/deno/ /home/opencode/app/
+COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/dist/deno /home/opencode/app/dist/deno
 
 USER opencode
 
-RUN deno cache --quiet --config /home/opencode/app/deno.jsonc /home/opencode/app/src/index-deno.js
+RUN cd /home/opencode/app/dist/deno/src \
+    && deno cache --quiet --config ../../../deno.jsonc ./index-deno.js
 
 USER root
 
@@ -124,6 +132,6 @@ COPY --chmod=755 packages/opencode/monkeypaw/entrypoint.sh /usr/local/bin/entryp
 
 USER opencode
 
-WORKDIR /home/opencode/app
+WORKDIR /home/opencode/app/dist/deno/src
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["deno", "run", "--config", "/home/opencode/app/deno.jsonc", "--sloppy-imports", "/home/opencode/app/src/index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0", "serve"]
+CMD ["deno", "run", "--config", "../../../deno.jsonc", "--sloppy-imports", "./index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0", "serve"]

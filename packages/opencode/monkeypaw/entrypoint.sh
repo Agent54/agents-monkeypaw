@@ -9,6 +9,7 @@ readonly cache_dir="${OPENCODE_CACHE_DIR:-/home/opencode/cache/opencode}"
 readonly temp_dir="${TMPDIR:-/tmp/opencode}"
 readonly deno_dir="${DENO_DIR:-/home/opencode/cache/deno}"
 readonly app_root="${OPENCODE_APP_ROOT:-/home/opencode/app/packages/opencode}"
+readonly launch_cwd="${OPENCODE_LAUNCH_CWD:-$app_root/dist/deno}"
 readonly audit_file="${DENO_AUDIT_PERMISSIONS:-/home/opencode/deno-permissions.audit.jsonl}"
 readonly broker_socket="${DENO_PERMISSION_BROKER_PATH:-/home/opencode/monkeypaw/permission-broker.sock}"
 readonly global_config_dir="${XDG_CONFIG_HOME:-/home/opencode/config}/opencode"
@@ -75,6 +76,7 @@ prepare_runtime() {
   require_dir "$global_config_dir"
   require_dir "$OPENCODE_CONFIG_DIR"
   require_dir "$app_root"
+  require_dir "$launch_cwd"
   if [ ! -e "$data_dir/worktree" ]; then
     ln -s "$worktree_root" "$data_dir/worktree"
     return
@@ -133,6 +135,7 @@ echo "[security] PID=$$ UID=$(id -u) GID=$(id -g)"
 
 apply_resource_limits
 prepare_runtime
+cd "$launch_cwd"
 
 if [ "${LANDLOCK_ENABLED:-true}" != "true" ]; then
   echo "[security] Landlock disabled via LANDLOCK_ENABLED=false"

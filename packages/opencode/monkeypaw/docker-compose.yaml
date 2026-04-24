@@ -12,6 +12,14 @@ services:
     build:
       context: ../../..
       dockerfile: packages/opencode/monkeypaw/proxy/Dockerfile
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -S /sockets/internal/permission-broker.sock
+      interval: 1s
+      timeout: 1s
+      retries: 30
+      start_period: 1s
     volumes:
       - proxy-internal:/sockets/internal
       - type: bind
@@ -24,7 +32,8 @@ services:
       context: ../../..
       dockerfile: packages/opencode/monkeypaw/Dockerfile
     depends_on:
-      - proxy
+      proxy:
+        condition: service_healthy
     environment:
       DENO_PERMISSION_BROKER_PATH: /tmp/opencode-proxy/permission-broker.sock
     ports:
@@ -32,7 +41,6 @@ services:
     volumes:
       - ../../..:/home/opencode/workspaces/repo
       - proxy-internal:/tmp/opencode-proxy
-    working_dir: /home/opencode/workspaces/repo
 
 volumes:
   proxy-internal:

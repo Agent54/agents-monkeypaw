@@ -225,6 +225,10 @@ for (const item of targets) {
             path: path.join(dir, "src/server/adapter.deno.ts"),
           }))
 
+          build.onResolve({ filter: /^#pty$/ }, () => ({
+            path: path.join(dir, "deno-shims/bun-pty.ts"),
+          }))
+
           build.onResolve({ filter: /^fs\/promises$/ }, () => ({
             path: path.join(dir, "deno-shims/fs-promises.ts"),
           }))

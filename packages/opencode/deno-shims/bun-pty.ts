@@ -1,6 +1,6 @@
-import fs from "node:fs"
 import * as nodePty from "npm:@lydell/node-pty"
 
+const debug = (...args) => console.error("[deno-pty]", ...args)
 const encoder = new TextEncoder()
 
 export function spawn(command, args = [], options = {}) {  
@@ -10,23 +10,28 @@ export function spawn(command, args = [], options = {}) {
     env: options.env,
   })
   let writable = true
+  const writer = Deno.openSync(`/proc/self/fd/${pty.fd}`, { write: true })
+  debug("spawn", {
+    pid: pty.pid,
+    fd: pty.fd,
+    socketFd: pty._socket?.fd,
+    socketDestroyed: pty._socket?.destroyed,
+    command,
+    args,
+    cwd: options.cwd,
+  })
 
   const writeAll = (data) => {
     const buffer = typeof data === "string" ? encoder.encode(data) : data
     let offset = 0
     while (offset < buffer.byteLength) {
-      const written = fs.writeSync(pty.fd, buffer, offset, buffer.byteLength - offset)
+      const written = writer.writeSync(buffer.subarray(offset))
+      debug("write", { fd: pty.fd, requested: buffer.byteLength - offset, written })
       if (written <= 0) return
       offset += written
     }
   }
 
-  pty._writeStream?._writeQueue?.splice(0)
-  pty._writeStream?.dispose?.()
-  if (pty._writeStream) {
-    pty._writeStream.write = writeAll
-    pty._writeStream._processWriteQueue = () => {}
-  }
   pty._write = writeAll
 
   return {
@@ -36,6 +41,7 @@ export function spawn(command, args = [], options = {}) {
       try {
         pty.write(data)
       } catch (error) {
+        debug("write failed", { fd: pty.fd, code: error?.code, message: error?.message })
         if (error?.code !== "EBADF") throw error
         writable = false
       }
@@ -47,11 +53,16 @@ export function spawn(command, args = [], options = {}) {
       pty.kill()
     },
     onData(fn) {
-      return pty.onData(fn)
+      return pty.onData((data) => {
+        debug("data", { pid: pty.pid, length: data.length })
+        fn(data)
+      })
     },
     onExit(fn) {
       return pty.onExit((event) => {
         writable = false
+        writer.close()
+        debug("exit", { pid: pty.pid, event })
         fn(event)
       })
     },

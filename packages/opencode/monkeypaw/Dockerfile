@@ -122,8 +122,11 @@ COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/dist/den
 
 USER opencode
 
-RUN cd /home/opencode/app/dist/deno/src \
-    && deno cache --quiet --config ../../../deno.jsonc ./index-deno.js
+RUN set -euo pipefail; \
+    node_pty_package="@lydell/node-pty-linux-x64"; \
+    if [ "$(uname -m)" = "aarch64" ]; then node_pty_package="@lydell/node-pty-linux-arm64"; fi; \
+    cd /home/opencode/app/dist/deno/src \
+    && deno cache --quiet --config ../../../deno.jsonc "npm:${node_pty_package}@1.2.0-beta.10" ./index-deno.js
 
 USER root
 

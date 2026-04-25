@@ -119,6 +119,9 @@ apply_landlock() {
   append_if_exists rw /dev/urandom
   append_if_exists rw /dev/random
   append_if_exists rw /dev/tty
+  append_if_exists rw /dev/ptmx
+  append_if_exists rw /dev/pts
+  append_if_exists rw /dev/pts/ptmx
 
   export LANDLOCK_RX="$(join_paths rx)"
   export LANDLOCK_RO="$(join_paths ro)"

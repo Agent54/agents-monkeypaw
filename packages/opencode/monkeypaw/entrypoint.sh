@@ -122,7 +122,6 @@ apply_landlock() {
   append_if_exists rw /dev/ptmx
   append_if_exists rw /dev/pts
   append_if_exists rw /dev/pts/ptmx
-  append_if_exists rw /proc/self/fd
 
   export LANDLOCK_RX="$(join_paths rx)"
   export LANDLOCK_RO="$(join_paths ro)"

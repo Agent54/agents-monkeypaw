@@ -1,3 +1,20 @@
 [aria-controls="terminal-panel"] {
   display: none;
 }
+
+[data-component="logo-mark"] {
+  display: none;
+}
+
+#opencode-titlebar-center button {
+  display: flex;
+  max-width: min(240px, calc(100vw - 112px));
+}
+
+[data-component="prompt-input"] + div.pointer-events-none {
+  display: none;
+}
+
+#opencode-titlebar-right .hidden.md\:flex {
+  display: flex;
+}

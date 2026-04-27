@@ -44,8 +44,10 @@ export default [
         .filter((f) => f.endsWith(".css"))
         .sort()
       if (!files.length) return
-      const imports = files.map((f) => `@import "${join(monkeypaw, f)}";`).join("\n")
-      return { code: code + "\n" + imports, map: null }
+      return {
+        code: code + "\n" + files.map((f) => readFileSync(join(monkeypaw, f), "utf8")).join("\n"),
+        map: null,
+      }
     },
   },
   tailwindcss(),

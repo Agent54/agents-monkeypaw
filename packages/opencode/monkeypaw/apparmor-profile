@@ -1,0 +1,94 @@
+# AppArmor profile for secured agent containers.
+# Load with: sudo apparmor_parser -r -W opencode/apparmor-profile
+# Reference in compose via security_opt: - apparmor:opencode-secured
+
+#include <tunables/global>
+
+profile agent-secured flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # ── Network: only inet/inet6 stream (TCP) and dgram (UDP for DNS) ──
+  network inet stream,
+  network inet dgram,
+  network inet6 stream,
+  network inet6 dgram,
+  # Deny raw sockets, packet sockets, netlink
+  deny network raw,
+  deny network packet,
+
+  # ── Filesystem: deny by default, allow specific paths ──
+
+  # Read-only: system libraries, binaries, certs
+  /usr/** r,
+  /lib/** r,
+  /lib64/** r,
+  /bin/** rix,
+  /sbin/** rix,
+  /usr/bin/** rix,
+  /usr/sbin/** rix,
+  /usr/local/bin/** rix,
+  /etc/ssl/** r,
+  /etc/ca-certificates/** r,
+  /etc/resolv.conf r,
+  /etc/hosts r,
+  /etc/nsswitch.conf r,
+  /etc/passwd r,
+  /etc/group r,
+  /etc/ld.so.cache r,
+  /etc/ld.so.conf r,
+  /etc/ld.so.conf.d/** r,
+
+  # Read-only: application config
+  /etc/opencode/** r,
+
+  # Read-write: workspace and data directories
+  /workspaces/** rw,
+  /home/opencode/** rw,
+  /home/opencode/.local/share/opencode/** rw,
+
+  # Read-write: tmpfs mounts
+  /tmp/** rw,
+  /run/** rw,
+
+  # Proc/dev access (minimal)
+  /proc/self/** r,
+  /proc/sys/kernel/random/uuid r,
+  /dev/null rw,
+  /dev/urandom r,
+  /dev/random r,
+
+  # ── Deny dangerous operations ──
+  deny /proc/*/mem rw,
+  deny /proc/sysrq-trigger rw,
+  deny /proc/kcore r,
+  deny /sys/** w,
+  deny /boot/** rwx,
+  deny /root/** rwx,
+
+  # Deny mount/umount
+  deny mount,
+  deny umount,
+  deny pivot_root,
+
+  # Deny ptrace (no debugging other processes)
+  deny ptrace,
+
+  # Deny loading kernel modules
+  deny @{PROC}/sys/kernel/modprobe w,
+
+  # Deny changing capabilities
+  deny capability sys_admin,
+  deny capability sys_module,
+  deny capability sys_rawio,
+  deny capability sys_ptrace,
+  deny capability net_admin,
+  deny capability net_raw,
+  deny capability mknod,
+  deny capability sys_boot,
+  deny capability sys_nice,
+  deny capability sys_resource,
+  deny capability sys_time,
+
+  # Allow signal to own processes only
+  signal (send,receive) peer=agent-secured,
+}

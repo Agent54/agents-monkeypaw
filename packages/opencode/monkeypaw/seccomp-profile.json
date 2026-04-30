@@ -1,0 +1,227 @@
+{
+  "_comment": "Tight seccomp allowlist for agent containers Only syscalls needed by Node.js/Bun HTTP server + child process spawning (bash, git, grep, etc). Default DENY all.",
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "defaultErrnoRet": 1,
+  "archMap": [
+    {
+      "architecture": "SCMP_ARCH_X86_64",
+      "subArchitectures": ["SCMP_ARCH_X86", "SCMP_ARCH_X32"]
+    },
+    {
+      "architecture": "SCMP_ARCH_AARCH64",
+      "subArchitectures": ["SCMP_ARCH_ARM"]
+    }
+  ],
+  "syscalls": [
+    {
+      "_comment": "Process lifecycle: fork, exec, exit, wait",
+      "names": [
+        "execve", "execveat",
+        "exit", "exit_group",
+        "fork", "vfork",
+        "wait4", "waitid",
+        "kill", "tgkill", "tkill",
+        "getpid", "getppid", "gettid",
+        "getpgid", "getpgrp", "setpgid", "setsid",
+        "prctl", "prlimit64",
+        "sched_yield", "sched_getaffinity",
+        "set_tid_address", "set_robust_list", "get_robust_list",
+        "rseq"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "clone with restricted flags (no CLONE_NEWUSER, CLONE_NEWNS, etc.)",
+      "names": ["clone"],
+      "action": "SCMP_ACT_ALLOW",
+      "args": [
+        {
+          "index": 0,
+          "value": 2114060288,
+          "op": "SCMP_CMP_MASKED_EQ"
+        }
+      ]
+    },
+    {
+      "_comment": "clone3 allowed for musl (Alpine) which uses it as primary clone syscall",
+      "names": ["clone3"],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Memory management",
+      "names": [
+        "brk", "mmap", "mmap2", "munmap", "mprotect", "mremap",
+        "madvise", "mlock", "mlock2", "munlock",
+        "memfd_create", "membarrier", "mincore"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "File I/O: open, read, write, close, stat, seek",
+      "names": [
+        "open", "openat", "openat2", "creat",
+        "close",
+        "read", "readv", "pread64", "preadv", "preadv2",
+        "write", "writev", "pwrite64", "pwritev", "pwritev2",
+        "lseek",
+        "fstat", "fstat64", "newfstatat", "fstatat64", "stat", "stat64", "lstat", "lstat64", "statx", "statfs", "fstatfs",
+        "access", "faccessat", "faccessat2",
+        "readlink", "readlinkat",
+        "getdents", "getdents64",
+        "fcntl", "fcntl64",
+        "flock",
+        "dup", "dup2", "dup3",
+        "ftruncate", "ftruncate64", "truncate", "truncate64",
+        "fallocate",
+        "copy_file_range",
+        "sendfile", "sendfile64",
+        "splice", "tee", "vmsplice",
+        "fadvise64", "readahead"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "File metadata and directory ops",
+      "names": [
+        "mkdir", "mkdirat",
+        "rmdir",
+        "unlink", "unlinkat",
+        "rename", "renameat", "renameat2",
+        "link", "linkat",
+        "symlink", "symlinkat",
+        "chmod", "fchmod", "fchmodat",
+        "chown", "fchown", "fchownat", "lchown",
+        "umask",
+        "chdir", "fchdir", "getcwd",
+        "utime", "utimensat", "utimes", "futimesat"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Filesystem sync",
+      "names": [
+        "fsync", "fdatasync", "sync", "syncfs", "sync_file_range", "msync"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Networking: socket, connect, bind, listen, accept, send, recv",
+      "names": [
+        "socket", "socketpair", "socketcall",
+        "bind", "listen",
+        "accept", "accept4",
+        "connect",
+        "send", "sendto", "sendmsg", "sendmmsg",
+        "recv", "recvfrom", "recvmsg", "recvmmsg",
+        "getsockname", "getpeername",
+        "getsockopt", "setsockopt",
+        "shutdown"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Epoll/poll/select for event loops (Node.js, Bun)",
+      "names": [
+        "epoll_create", "epoll_create1", "epoll_ctl", "epoll_wait", "epoll_pwait",
+        "poll", "ppoll",
+        "select", "pselect6",
+        "eventfd", "eventfd2"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "io_uring for Bun's async I/O",
+      "names": [
+        "io_uring_setup", "io_uring_enter", "io_uring_register"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Signals",
+      "names": [
+        "rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "rt_sigsuspend",
+        "rt_sigpending", "rt_sigtimedwait", "rt_sigqueueinfo", "rt_tgsigqueueinfo",
+        "sigaltstack", "signalfd", "signalfd4",
+        "sigprocmask", "sigreturn",
+        "restart_syscall"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Timers and clocks",
+      "names": [
+        "clock_gettime", "clock_getres", "clock_nanosleep",
+        "gettimeofday", "time", "times",
+        "nanosleep", "pause",
+        "timer_create", "timer_delete", "timer_gettime", "timer_getoverrun", "timer_settime",
+        "timerfd_create", "timerfd_gettime", "timerfd_settime",
+        "setitimer", "getitimer", "alarm"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Threading primitives",
+      "names": [
+        "futex", "futex_waitv",
+        "getcpu"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Pipe for child process communication",
+      "names": [
+        "pipe", "pipe2"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "inotify for file watching",
+      "names": [
+        "inotify_init", "inotify_init1", "inotify_add_watch", "inotify_rm_watch"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Terminal/ioctl for child process PTY",
+      "names": [
+        "ioctl"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "User/group identity (needed for non-root operation)",
+      "names": [
+        "getuid", "getuid32", "geteuid", "geteuid32",
+        "getgid", "getgid32", "getegid", "getegid32",
+        "getgroups", "getgroups32",
+        "getresuid", "getresuid32", "getresgid", "getresgid32",
+        "setuid", "setuid32", "setgid", "setgid32",
+        "setresuid", "setresuid32", "setresgid", "setresgid32",
+        "setreuid", "setreuid32", "setregid", "setregid32",
+        "setgroups", "setgroups32",
+        "setfsuid", "setfsuid32", "setfsgid", "setfsgid32"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "Misc: uname, sysinfo, getrandom, getrlimit",
+      "names": [
+        "uname", "sysinfo",
+        "getrandom",
+        "getrlimit", "ugetrlimit", "setrlimit",
+        "getrusage", "getsid",
+        "getpriority", "setpriority",
+        "capget"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "_comment": "SQLite needs these for database locking",
+      "names": [
+        "fgetxattr", "flistxattr", "getxattr", "listxattr", "lgetxattr", "llistxattr",
+        "setxattr", "removexattr"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}

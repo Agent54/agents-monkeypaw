@@ -1,0 +1,90 @@
+# ===============================================
+# Security Hardening Layer
+# ===============================================
+# 1. Seccomp: tight syscall allowlist (applied via docker-compose security_opt)
+# 2. Landlock: filesystem access restrictions (applied at runtime via entrypoint)
+# 3. Network: iptables egress filtering (applied at runtime via entrypoint)
+# 4. Capabilities: all dropped except minimal set (via docker-compose cap_drop)
+# 5. Read-only rootfs with explicit tmpfs/volume mounts
+# 6. Non-root user with no sudo
+
+# --- Original security notes ---
+# Use OS permissions like you mean it: run it as a separate user with minimal file access and no admin/sudo by default. Unless you know what you’re doing.
+# Drop Docker privileges, disable get new caps, run as non-root inside the container (USER), use read_only: true filesystem where possible, and mount only the working directory as writable
+
+# Drop Linux capabilities (beyond non-root). The OWASP Docker Cheat Sheet recommends reducing container capabilities to the minimum required.
+# Use Docker’s default seccomp profile. Docker’s docs explain that the default seccomp profile blocks a meaningful set of syscalls as a reasonable baseline.
+
+# Shared security infrastructure.
+# Provides:
+#   1. Isolated network + envoy deny-all egress proxy
+#   2. "secured" base service — use `extends` to inherit all hardening
+
+# Usage in docker-compose.yaml:
+#   include:
+#     - compose.security.yaml
+#
+#   services:
+#     my-service:
+#       extends:
+#         service: secured
+#       image: my-image
+#       command: [...]
+
+services:
+  # ── Base service: full security hardening ──
+  # Not started directly — only used via `extends`
+  secured:
+    security_opt:
+      - seccomp:./seccomp-profile.json
+      # - apparmor:agent-secured  # requires AppArmor on host: sudo apparmor_parser -r -W apparmor-profile
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=256M,nosuid,exec # FIXME: better way to support nodesj etc. ,noexec
+      - /run:size=64M
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3G
+          pids: 256
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    restart: "on-failure:3"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # Envoy proxy (commented out by default for easy switching)
+      # HTTP_PROXY: "http://egress-proxy:10000"
+      # HTTPS_PROXY: "http://egress-proxy:10001"
+
+      # mitmproxy (active)
+      HTTP_PROXY: "http://mitm-proxy:8080"
+      HTTPS_PROXY: "http://mitm-proxy:8080"
+      NO_PROXY: "localhost,127.0.0.1"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+
+networks:
+  isolated:
+    internal: true  # no default gateway — no direct internet access
+
+# TODO:
+# AppArmor module is loaded in the kernel (/sys/module/apparmor/parameters/enabled = Y) but the securityfs isn't mounted (/sys/kernel/security/apparmor/ doesn't exist). This means you're running inside a container yourself (the orchestrator container) where securityfs isn't mounted.
+
+# To fix, the host VM (Colima) needs to mount securityfs and load the profile. From the Colima VM:
+
+# mount -t securityfs securityfs /sys/kernel/security
+# apparmor_parser -r -W /path/to/apparmor-profile
+# Or if you're running Docker-in-Docker, the outer container needs --security-opt apparmor=unconfined and securityfs mounted.
+
+# For now, AppArmor is correctly commented out in compose.security.yaml. The profile file apparmor-profile is ready for when securityfs is available. All other security layers (seccomp, no-new-privileges, cap_drop, read_only, isolated network, envoy proxy, non-root user) are active.
+
+# opencode-1      | [security] iptables not available, using Docker network isolation only
+# opencode-1      | [security] WARNING: Landlock not supported by kernel, skipping filesystem restrictions

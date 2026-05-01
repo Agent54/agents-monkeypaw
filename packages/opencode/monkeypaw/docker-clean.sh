@@ -1,1 +1,1 @@
-docker system prune -a  -Y && docke-compose -f /Users/jan/Dev/xe/stacks/agents/opencode/packages/opencode/monkeypaw/docker-compose.yaml --profile build build basee
+docker system prune -a  -f && docker-compose -f /Users/jan/Dev/xe/stacks/agents/opencode/packages/opencode/monkeypaw/docker-compose.yaml --profile build build base

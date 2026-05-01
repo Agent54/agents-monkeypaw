@@ -63,8 +63,8 @@ apply_resource_limits() {
 }
 
 prepare_runtime() {
+  mkdir -p "$workspace_root" "$worktree_root" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir"
   require_writable_dir "$workspace_root"
-  mkdir -p "$worktree_root"
   require_writable_dir "$worktree_root"
   require_writable_dir "$data_dir"
   require_writable_dir "$state_dir"
@@ -114,10 +114,11 @@ apply_landlock() {
   append_if_exists ro /etc/ld.so.conf.d
   append_if_exists ro /etc/ld-musl-x86_64.path
   append_if_exists ro /etc/ld-musl-aarch64.path
+  append_if_exists ro /mitm-ca
+  append_if_exists ro /dev/urandom
+  append_if_exists ro /dev/random
 
   append_if_exists rw /dev/null
-  append_if_exists rw /dev/urandom
-  append_if_exists rw /dev/random
   append_if_exists rw /dev/tty
   append_if_exists rw /dev/ptmx
   append_if_exists rw /dev/pts

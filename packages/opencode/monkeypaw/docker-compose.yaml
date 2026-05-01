@@ -1,3 +1,13 @@
+# =============================================================================
+# Security Hardening Layer
+# =============================================================================
+# 1. Seccomp: tight syscall allowlist (applied via docker-compose security_opt)
+# 2. Landlock: filesystem access restrictions (applied at runtime via entrypoint)
+# 3. Network: iptables egress filtering (applied at runtime via entrypoint)
+# 4. Capabilities: all dropped except minimal set (via docker-compose cap_drop)
+# 5. Read-only rootfs with explicit tmpfs/volume mounts
+# 6. Non-root user with no sudo
+
 services:
   base:
     profiles:
@@ -26,21 +36,161 @@ services:
         source: /tmp/opencode-monkeypaw-proxy
         target: /sockets/external
 
+  mitm-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.mitm
+    entrypoint: ["mitmweb"]
+    command:
+      [
+        "-v",
+        "--no-web-open-browser",
+        "--web-host",
+        "0.0.0.0",
+        "--web-port",
+        "8081",
+        "--listen-host",
+        "0.0.0.0",
+        "--listen-port",
+        "8080",
+        "--mode",
+        "regular@8080",
+        "--mode",
+        "reverse:http://agent:4097@4097",
+        "--set",
+        "confdir=/mitm-ca",
+        "--set",
+        "stream_large_bodies=1",
+        "--set",
+        "termlog_verbosity=debug",
+        "--set",
+        "web_password=${MITM_WEB_PASSWORD:-mitm-change-me}",
+      ]
+    environment:
+      MITM_WEB_PASSWORD: "${MITM_WEB_PASSWORD:-mitm-change-me}"
+    networks:
+      - isolated
+      - default
+    ports:
+      - "8081:8081"
+      - "4097:4097"
+    tmpfs:
+      - /tmp:size=128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "test -s /mitm-ca/mitmproxy-ca-cert.pem && curl -fsS 'http://localhost:8081/?token='$$MITM_WEB_PASSWORD >/dev/null",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - mitm-ca:/mitm-ca
+
+  mcp-everything:
+    extends:
+      file: compose.security.yaml
+      service: secured
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp-everything
+    user: "node"
+    networks:
+      - isolated
+    depends_on:
+      # egress-proxy:
+      #   condition: service_healthy
+      mitm-proxy:
+        condition: service_started
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/sse').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  agent-init:
+    image: alpine:3.23
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /data /workspaces /config/opencode /opencode-config /state/opencode /cache/opencode /cache/deno && chown -R 999:999 /data /workspaces /config /opencode-config /state /cache"]
+    volumes:
+      - '${STACKS_PATH}/agents/data/data:/data'
+      - '${STACKS_PATH}/agents/workspaces:/workspaces'
+      - '${STACKS_PATH}/agents/data/config:/config'
+      - '${STACKS_PATH}/agents/data/conf:/opencode-config'
+      - '${STACKS_PATH}/agents/data/state:/state'
+      - '${STACKS_PATH}/agents/data/cache:/cache'
   agent:
     image: opencode-monkeypaw-agent:local
     build:
       context: ../../..
       dockerfile: packages/opencode/monkeypaw/Dockerfile
     depends_on:
+      agent-init:
+        condition: service_completed_successfully
+      # egress-proxy:
+      #   condition: service_healthy
+      mitm-proxy:
+        condition: service_healthy
       proxy:
         condition: service_healthy
     environment:
       DENO_PERMISSION_BROKER_PATH: /tmp/opencode-proxy/permission-broker.sock
-    ports:
-      - "4097:4097"
+      NO_PROXY: "mcp-everything,localhost,127.0.0.1"
+      OPENCODE_CONFIG_DIR: "/home/opencode/config/opencode"
+      OPENROUTER_API_KEY: ""
+      # OPENCODE_SERVER_PASSWORD: "5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c"
+      DENO_CERT: "/mitm-ca/mitmproxy-ca-cert.pem"
+      DENO_AUDIT_PERMISSIONS: "/home/opencode/state/opencode/deno-permissions.audit.jsonl"
+      NODE_EXTRA_CA_CERTS: "/mitm-ca/mitmproxy-ca-cert.pem"
+      XDG_CONFIG_HOME: "/home/opencode/config"
+      # HOME: ""
+    extends:
+      file: compose.security.yaml
+      service: secured
+    user: "opencode"
+    networks:
+      - isolated
+    working_dir: /workspaces/fallback
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS -o /dev/null -u opencode:5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c http://localhost:4097/global/health",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     volumes:
+      - ${STACKS_PATH}/agents/workspaces:/home/opencode/workspaces
+      - '${STACKS_PATH}/agents/data/data:/home/opencode/share/opencode'
+      - '${STACKS_PATH}/agents/data/config:/home/opencode/config'
+      - '${STACKS_PATH}/agents/data/conf:/home/opencode/config/opencode'
+      - '${STACKS_PATH}/agents/data/state:/home/opencode/state'
+      - '${STACKS_PATH}/agents/data/cache:/home/opencode/cache'
       - ../../..:/home/opencode/workspaces/repo
+      - mitm-ca:/mitm-ca:ro
       - proxy-internal:/tmp/opencode-proxy
+    tmpfs:
+      - /tmp:size=256M,nosuid,exec
+      - /run:size=64M
+
+# OPENCODE_SERVER_PASSWORD="5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c" opencode attach http://localhost:4097
 
 volumes:
+  mitm-ca:
   proxy-internal:
+
+networks:
+  isolated:
+    internal: true

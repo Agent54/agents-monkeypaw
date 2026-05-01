@@ -135,6 +135,12 @@ COPY --chmod=755 packages/opencode/monkeypaw/entrypoint.sh /usr/local/bin/entryp
 
 USER opencode
 
+# RUN addgroup -S opencode && adduser -S -G opencode -h /home/opencode -s /bin/sh opencode \
+#     && mkdir -p /home/opencode /workspaces /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
+#     && chown -R opencode:opencode /home/opencode /workspaces
+
 WORKDIR /home/opencode/app/dist/deno/src
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+EXPOSE 4097
 CMD ["deno", "run", "--config", "../../../deno.jsonc", "--sloppy-imports", "./index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0", "serve"]

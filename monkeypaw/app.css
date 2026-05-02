@@ -18,3 +18,7 @@
 #opencode-titlebar-right .hidden.md\:flex {
   display: flex;
 }
+
+button {
+  cursor: pointer;
+}

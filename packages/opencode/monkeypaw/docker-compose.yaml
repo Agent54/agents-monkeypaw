@@ -74,14 +74,14 @@ services:
   agent-init:
     image: alpine:3.23
     restart: "no"
-    command: ["sh", "-c", "mkdir -p /data /workspaces /config/opencode /opencode-config /state/opencode /cache/opencode /cache/deno && chown -R 999:999 /data /workspaces /config /opencode-config /state /cache"]
+    command:
+      [
+        "sh",
+        "-c",
+        "mkdir -p /stacks/agents/data/data /stacks/agents/workspaces /stacks/agents/data/config /stacks/agents/data/conf /stacks/agents/data/state /stacks/agents/data/cache /stacks/agents/data/cache/deno && chown -R 999:999 /stacks/agents/data/data /stacks/agents/workspaces /stacks/agents/data/config /stacks/agents/data/conf /stacks/agents/data/state /stacks/agents/data/cache",
+      ]
     volumes:
-      - '${STACKS_PATH}/agents/data/data:/data'
-      - '${STACKS_PATH}/agents/workspaces:/workspaces'
-      - '${STACKS_PATH}/agents/data/config:/config'
-      - '${STACKS_PATH}/agents/data/conf:/opencode-config'
-      - '${STACKS_PATH}/agents/data/state:/state'
-      - '${STACKS_PATH}/agents/data/cache:/cache'
+      - '${STACKS_PATH}:/stacks'
   agent:
     image: opencode-monkeypaw-agent:local
     build:
@@ -98,6 +98,8 @@ services:
       DENO_PERMISSION_BROKER_PATH: /tmp/opencode-proxy/permission-broker.sock
       NO_PROXY: "mcp-everything,localhost,127.0.0.1"
       OPENCODE_CONFIG_DIR: "/home/opencode/config/opencode"
+      OPENCODE_WORKSPACE_ROOT: "/stacks/agents/workspaces"
+      OPENCODE_WORKTREE_ROOT: "/stacks/agents/workspaces/worktree"
       OPENROUTER_API_KEY: ""
       # OPENCODE_SERVER_PASSWORD: "5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c"
       DENO_CERT: "/mitm-ca/mitmproxy-ca-cert.pem"
@@ -111,7 +113,7 @@ services:
     user: "opencode"
     networks:
       - isolated
-    working_dir: /workspaces/fallback
+    working_dir: /stacks
     healthcheck:
       test:
         [
@@ -123,13 +125,12 @@ services:
       retries: 3
       start_period: 15s
     volumes:
-      - ${STACKS_PATH}/agents/workspaces:/home/opencode/workspaces
+      - '${STACKS_PATH}:/stacks'
       - '${STACKS_PATH}/agents/data/data:/home/opencode/share/opencode'
       - '${STACKS_PATH}/agents/data/config:/home/opencode/config'
       - '${STACKS_PATH}/agents/data/conf:/home/opencode/config/opencode'
       - '${STACKS_PATH}/agents/data/state:/home/opencode/state'
       - '${STACKS_PATH}/agents/data/cache:/home/opencode/cache'
-      - ../../..:/home/opencode/workspaces/repo
       - mitm-ca:/mitm-ca:ro
       - proxy-internal:/tmp/opencode-proxy
     tmpfs:

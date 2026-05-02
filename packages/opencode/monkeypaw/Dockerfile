@@ -100,9 +100,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     XDG_STATE_HOME=/home/opencode/state \
     OPENCODE_APP_ROOT=/home/opencode/app \
     OPENCODE_CONFIG_DIR=/home/opencode/config/opencode \
-    OPENCODE_LAUNCH_CWD=/home/opencode/app/dist/deno/src \
-    OPENCODE_WORKSPACE_ROOT=/home/opencode/workspaces \
-    OPENCODE_WORKTREE_ROOT=/home/opencode/workspaces/worktree \
+    OPENCODE_WORKSPACE_ROOT=/stacks/agents/workspaces \
+    OPENCODE_WORKTREE_ROOT=/stacks/agents/workspaces/worktree \
     OPENCODE_DATA_DIR=/home/opencode/share/opencode \
     OPENCODE_STATE_DIR=/home/opencode/state/opencode \
     OPENCODE_CACHE_DIR=/home/opencode/cache/opencode
@@ -112,8 +111,8 @@ RUN curl -fsSL https://deno.land/install.sh | sh
 RUN groupadd --system opencode \
     && useradd --system --gid opencode --home-dir /home/opencode --create-home --shell /bin/bash opencode \
     && mkdir -p /home/opencode/config/opencode /home/opencode/cache/opencode /home/opencode/cache/deno \
-        /home/opencode/share/opencode /home/opencode/state/opencode /home/opencode/workspaces/worktree /home/opencode/monkeypaw /tmp/opencode \
-    && ln -sfn /home/opencode/workspaces/worktree /home/opencode/share/opencode/worktree \
+        /home/opencode/share/opencode /home/opencode/state/opencode /home/opencode/monkeypaw /stacks/agents/workspaces/worktree /tmp/opencode \
+    && ln -sfn /stacks/agents/workspaces/worktree /home/opencode/share/opencode/worktree \
     && chown -R opencode:opencode /home/opencode /tmp/opencode
 
 COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/deno.jsonc /home/opencode/app/deno.jsonc
@@ -139,8 +138,8 @@ USER opencode
 #     && mkdir -p /home/opencode /workspaces /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
 #     && chown -R opencode:opencode /home/opencode /workspaces
 
-WORKDIR /home/opencode/app/dist/deno/src
+WORKDIR /stacks
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 EXPOSE 4097
-CMD ["deno", "run", "--config", "../../../deno.jsonc", "--sloppy-imports", "./index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0", "serve"]
+CMD ["deno", "run", "--config", "/home/opencode/app/deno.jsonc", "--sloppy-imports", "/home/opencode/app/dist/deno/src/index-deno.js", "--log-level", "DEBUG", "--print-logs", "--port", "4097", "--hostname", "0.0.0.0", "serve"]

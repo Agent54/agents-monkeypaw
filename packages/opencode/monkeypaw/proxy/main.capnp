@@ -32,13 +32,12 @@ const config :Workerd.Config = (
     ),
     (
       name = "httpProxy",
-      http = (style = proxy),
+      tcp = (),
       service = (name = "proxy", entrypoint = "proxy"),
     ),
     (
       name = "httpsProxy",
-      https = (
-        options = (style = proxy),
+      tcp = (
         tlsOptions = (
           keypair = (
             privateKey = embed "workerd-proxy-key.pem",

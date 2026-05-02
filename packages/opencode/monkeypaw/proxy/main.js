@@ -1,4 +1,8 @@
+import { connect } from "cloudflare:sockets"
+
 const encoder = new TextEncoder()
+const decoder = new TextDecoder()
+const headDelimiter = new Uint8Array([13, 10, 13, 10])
 let nextSessionId = 1
 
 function log(event, value) {
@@ -33,6 +37,51 @@ function compactJson(value) {
 
 function jsonLine(value) {
   return JSON.stringify(stableValue(value))
+}
+
+function shortTimestamp(value) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toISOString().replace("T", " ").replace("Z", "")
+}
+
+function permissionValue(request) {
+  if (typeof request.value === "string") return request.value
+  if (request.value === undefined) return "-"
+  return compactJson(request.value)
+}
+
+function summarizePermissionLog(request) {
+  const id = request.id ?? "-"
+  const timestamp = shortTimestamp(request.datetime)
+  const permission = request.permission ?? "permission"
+  return `${id}: ${timestamp}, ${permission}: ${permissionValue(request)}`
+}
+
+function concatBytes(left, right) {
+  if (!left.byteLength) return right
+  if (!right.byteLength) return left
+  const result = new Uint8Array(left.byteLength + right.byteLength)
+  result.set(left)
+  result.set(right, left.byteLength)
+  return result
+}
+
+function findBytes(haystack, needle) {
+  if (haystack.byteLength < needle.byteLength) return -1
+
+  for (let index = 0; index <= haystack.byteLength - needle.byteLength; index++) {
+    let matches = true
+    for (let offset = 0; offset < needle.byteLength; offset++) {
+      if (haystack[index + offset] === needle[offset]) continue
+      matches = false
+      break
+    }
+    if (matches) return index
+  }
+
+  return -1
 }
 
 async function writeLine(writer, value) {
@@ -78,9 +127,7 @@ async function handlePermissionBrokerSession(socket) {
       }
 
       const response = { id: request.id, result: "allow" }
-      console.log(
-        `[permission-broker] session=${sessionId} request=${jsonLine(request)} response=${jsonLine(response)}`,
-      )
+      console.log(`[permission-broker] ${summarizePermissionLog(request)}`)
 
       try {
         await writeLine(writer, response)
@@ -133,11 +180,243 @@ function logHttpExchange(kind, request, response, startedAt, extra = {}) {
   )
 }
 
-function logHttpFailure(kind, request, startedAt, error, extra = {}) {
+function logProxyEvent(kind, message, startedAt, extra = {}) {
+  const duration = Date.now() - startedAt
+  console.log(`[${kind}] ${message} dur=${duration}ms extra=${compactJson(extra)}`)
+}
+
+function logHttpFailure(kind, message, startedAt, error, extra = {}) {
   const duration = Date.now() - startedAt
   console.log(
-    `[${kind}] ${request.method} ${request.url} !! ${clip(error?.message ?? String(error))} dur=${duration}ms extra=${compactJson(extra)}`,
+    `[${kind}] ${message} !! ${clip(error?.message ?? String(error))} dur=${duration}ms extra=${compactJson(extra)}`,
   )
+}
+
+async function readRequestHead(socket) {
+  const reader = socket.readable.getReader()
+  let pending = new Uint8Array()
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) {
+      reader.releaseLock()
+      throw new Error("socket closed before proxy headers completed")
+    }
+
+    pending = concatBytes(pending, value)
+    const index = findBytes(pending, headDelimiter)
+    if (index === -1) {
+      if (pending.byteLength <= 64 * 1024) continue
+      reader.releaseLock()
+      throw new Error("proxy headers exceeded 64 KiB")
+    }
+
+    return {
+      head: pending.slice(0, index + headDelimiter.byteLength),
+      reader,
+      rest: pending.slice(index + headDelimiter.byteLength),
+    }
+  }
+}
+
+function parseRequestHead(head) {
+  const lines = decoder.decode(head).split("\r\n")
+  const requestLine = lines.shift()
+  if (!requestLine) throw new Error("missing request line")
+
+  const [method, target, version] = requestLine.split(" ")
+  if (!method || !target || !version) throw new Error(`invalid request line: ${requestLine}`)
+
+  const headers = new Headers()
+  for (const line of lines) {
+    if (!line) continue
+    const index = line.indexOf(":")
+    if (index === -1) continue
+    headers.append(line.slice(0, index).trim(), line.slice(index + 1).trim())
+  }
+
+  return { headers, method, target, version }
+}
+
+function streamWithPrefix(reader, prefix) {
+  let pending = prefix
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (pending.byteLength) {
+        controller.enqueue(pending)
+        pending = new Uint8Array()
+        return
+      }
+
+      const { done, value } = await reader.read()
+      if (done) {
+        reader.releaseLock()
+        controller.close()
+        return
+      }
+
+      controller.enqueue(value)
+    },
+
+    async cancel(reason) {
+      await reader.cancel(reason)
+      reader.releaseLock()
+    },
+  })
+}
+
+function parseAuthority(authority, defaultPort) {
+  if (authority.startsWith("[")) {
+    const end = authority.indexOf("]")
+    if (end === -1) throw new Error(`invalid authority: ${authority}`)
+    const host = authority.slice(1, end)
+    const port = authority.slice(end + 1).replace(/^:/, "")
+    return { hostname: host, port: Number(port || defaultPort) }
+  }
+
+  const split = authority.split(":")
+  if (split.length === 1) return { hostname: authority, port: defaultPort }
+  if (split.length === 2) return { hostname: split[0], port: Number(split[1] || defaultPort) }
+  throw new Error(`invalid authority: ${authority}`)
+}
+
+function requestUrl(target, headers) {
+  if (target.startsWith("http://") || target.startsWith("https://")) return new URL(target)
+  const host = headers.get("host")
+  if (!host) throw new Error(`host header missing for target ${target}`)
+  return new URL(target, `http://${host}`)
+}
+
+async function writeResponse(socket, response) {
+  const writer = socket.writable.getWriter()
+  const body = response.body ? new Uint8Array(await response.arrayBuffer()) : new Uint8Array()
+  const headers = proxyHeaders(response.headers)
+  headers.delete("transfer-encoding")
+  headers.set("connection", "close")
+  headers.set("content-length", String(body.byteLength))
+
+  const statusLine = `HTTP/1.1 ${response.status} ${response.statusText || "OK"}\r\n`
+  const headerBlock = [...headers.entries()].map(([name, value]) => `${name}: ${value}\r\n`).join("")
+
+  try {
+    await writer.write(encoder.encode(`${statusLine}${headerBlock}\r\n`))
+    if (body.byteLength) await writer.write(body)
+  } finally {
+    writer.releaseLock()
+  }
+}
+
+async function writeSimpleResponse(socket, status, statusText, body) {
+  const writer = socket.writable.getWriter()
+  const payload = encoder.encode(body)
+
+  try {
+    await writer.write(
+      encoder.encode(
+        `HTTP/1.1 ${status} ${statusText}\r\ncontent-length: ${payload.byteLength}\r\ncontent-type: text/plain; charset=utf-8\r\nconnection: close\r\n\r\n`,
+      ),
+    )
+    await writer.write(payload)
+  } finally {
+    writer.releaseLock()
+  }
+}
+
+async function handleConnectTunnel(socket, request, reader, rest, startedAt) {
+  const authority = parseAuthority(request.target, 443)
+  const upstream = connect(authority)
+
+  try {
+    await upstream.opened
+  } catch (error) {
+    logHttpFailure("egress-proxy", `CONNECT ${request.target}`, startedAt, error)
+    try {
+      upstream.close()
+    } catch {}
+    await writeSimpleResponse(socket, 502, "Bad Gateway", "connect tunnel failed\n")
+    return
+  }
+
+  const writer = socket.writable.getWriter()
+
+  try {
+    await writer.write(encoder.encode("HTTP/1.1 200 Connection Established\r\n\r\n"))
+  } finally {
+    writer.releaseLock()
+  }
+
+  logProxyEvent("egress-proxy", `CONNECT ${request.target} -> 200 tunnel`, startedAt)
+
+  const clientToUpstream = streamWithPrefix(reader, rest).pipeTo(upstream.writable)
+  const upstreamToClient = upstream.readable.pipeTo(socket.writable)
+  await Promise.allSettled([clientToUpstream, upstreamToClient])
+
+  try {
+    upstream.close()
+  } catch {}
+
+  try {
+    socket.close()
+  } catch {}
+}
+
+async function handleForwardProxy(socket, request, reader, rest, startedAt) {
+  const url = requestUrl(request.target, request.headers)
+  const headers = proxyHeaders(request.headers)
+  const body =
+    request.method === "GET" || request.method === "HEAD"
+      ? undefined
+      : streamWithPrefix(reader, rest)
+
+  const upstream = await fetch(url, {
+    method: request.method,
+    headers,
+    body,
+    redirect: "manual",
+  })
+
+  logHttpExchange(
+    "egress-proxy",
+    {
+      method: request.method,
+      url: url.toString(),
+    },
+    upstream,
+    startedAt,
+    {
+      version: request.version,
+    },
+  )
+
+  await writeResponse(socket, upstream)
+}
+
+async function handleProxySocket(socket) {
+  const startedAt = Date.now()
+
+  try {
+    const parsed = await readRequestHead(socket)
+    const request = parseRequestHead(parsed.head)
+
+    if (request.method === "CONNECT") {
+      await handleConnectTunnel(socket, request, parsed.reader, parsed.rest, startedAt)
+      return
+    }
+
+    await handleForwardProxy(socket, request, parsed.reader, parsed.rest, startedAt)
+    try {
+      socket.close()
+    } catch {}
+  } catch (error) {
+    logHttpFailure("egress-proxy", "proxy socket", startedAt, error)
+    try {
+      await writeSimpleResponse(socket, 502, "Bad Gateway", "proxy failure\n")
+    } catch {}
+    try {
+      socket.close()
+    } catch {}
+  }
 }
 
 export const permissionBroker = {
@@ -184,42 +463,12 @@ export const debugHttp = {
 }
 
 export const proxy = {
-  async fetch(request) {
-    const startedAt = Date.now()
-    if (request.method === "CONNECT") {
-      console.log(`[egress-proxy] CONNECT ${request.url} -> 405 tunneling-disabled dur=0ms extra={}`)
-      return new Response("tunneling is disabled; send absolute http:// or https:// requests to this workerd proxy.\n", {
-        status: 405,
-      })
-    }
+  async fetch() {
+    return new Response("proxy socket service is raw TCP; use connect().\n", { status: 404 })
+  },
 
-    const url = new URL(request.url)
-    if (!["http:", "https:"].includes(url.protocol)) return new Response("unsupported proxy target\n", { status: 400 })
-
-    try {
-      const requestBody = ["GET", "HEAD"].includes(request.method) ? new Uint8Array() : new Uint8Array(await request.arrayBuffer())
-      const upstream = await fetch(request.url, {
-        method: request.method,
-        headers: proxyHeaders(request.headers),
-        body: requestBody.byteLength ? requestBody : undefined,
-        redirect: "manual",
-      })
-      const responseBody = new Uint8Array(await upstream.arrayBuffer())
-      const responseHeaders = proxyHeaders(upstream.headers)
-      logHttpExchange("egress-proxy", request, upstream, startedAt, {
-        request_bytes: requestBody.byteLength,
-        response_bytes: responseBody.byteLength,
-      })
-
-      return new Response(responseBody, {
-        status: upstream.status,
-        statusText: upstream.statusText,
-        headers: responseHeaders,
-      })
-    } catch (error) {
-      logHttpFailure("egress-proxy", request, startedAt, error)
-      throw error
-    }
+  async connect(socket) {
+    await handleProxySocket(socket)
   },
 }
 
@@ -232,7 +481,7 @@ export const agent = {
       logHttpExchange("ingress-proxy", request, response, startedAt)
       return response
     } catch (error) {
-      logHttpFailure("ingress-proxy", request, startedAt, error)
+      logHttpFailure("ingress-proxy", `${request.method} ${request.url}`, startedAt, error)
       throw error
     }
   },

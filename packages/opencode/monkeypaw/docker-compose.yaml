@@ -32,6 +32,7 @@ services:
       start_period: 1s
     networks:
       - isolated
+      - default
     ports:
       - "8080:8080"
       - "8443:8443"

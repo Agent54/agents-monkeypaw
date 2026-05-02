@@ -3,6 +3,20 @@ using Workerd = import "/workerd/workerd.capnp";
 const config :Workerd.Config = (
   services = [
     (name = "proxy", worker = .proxyWorker),
+    (
+      name = "internet",
+      network = (
+        allow = ["public", "private"],
+        tlsOptions = (trustBrowserCas = true),
+      ),
+    ),
+    (
+      name = "agentServer",
+      external = (
+        address = "agent.monkeypaw_isolated:4097",
+        http = (),
+      ),
+    ),
   ],
 
   sockets = [
@@ -16,6 +30,29 @@ const config :Workerd.Config = (
       http = (),
       service = (name = "proxy", entrypoint = "debugHttp"),
     ),
+    (
+      name = "httpProxy",
+      http = (style = proxy),
+      service = (name = "proxy", entrypoint = "proxy"),
+    ),
+    (
+      name = "httpsProxy",
+      https = (
+        options = (style = proxy),
+        tlsOptions = (
+          keypair = (
+            privateKey = embed "workerd-proxy-key.pem",
+            certificateChain = embed "workerd-proxy-cert.pem",
+          ),
+        ),
+      ),
+      service = (name = "proxy", entrypoint = "proxy"),
+    ),
+    (
+      name = "agentHttp",
+      http = (),
+      service = (name = "proxy", entrypoint = "agent"),
+    ),
   ],
 );
 
@@ -28,4 +65,7 @@ const proxyWorker :Workerd.Worker = (
   ],
   compatibilityFlags = ["nodejs_compat_v2", "experimental"],
   compatibilityDate = "2026-04-23",
+  bindings = [
+    (name = "AGENT", service = "agentServer"),
+  ],
 );

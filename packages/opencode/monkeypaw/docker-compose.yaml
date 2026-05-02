@@ -25,74 +25,23 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - test -S /sockets/internal/permission-broker.sock
+        - test -S /sockets/internal/permission-broker.sock && test -s /mitm-ca/mitmproxy-ca-cert.pem && test -s /mitm-ca/workerd-proxy-cert.pem
       interval: 1s
       timeout: 1s
       retries: 30
       start_period: 1s
+    networks:
+      - isolated
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+      - "4097:4097"
     volumes:
+      - mitm-ca:/mitm-ca
       - proxy-internal:/sockets/internal
       - type: bind
         source: /tmp/opencode-monkeypaw-proxy
         target: /sockets/external
-
-  mitm-proxy:
-    build:
-      context: .
-      dockerfile: Dockerfile.mitm
-    entrypoint: ["mitmweb"]
-    command:
-      [
-        "-v",
-        "--no-web-open-browser",
-        "--web-host",
-        "0.0.0.0",
-        "--web-port",
-        "8081",
-        "--listen-host",
-        "0.0.0.0",
-        "--listen-port",
-        "8080",
-        "--mode",
-        "regular@8080",
-        "--mode",
-        "reverse:http://agent:4097@4097",
-        "--set",
-        "confdir=/mitm-ca",
-        "--set",
-        "stream_large_bodies=1",
-        "--set",
-        "termlog_verbosity=debug",
-        "--set",
-        "web_password=${MITM_WEB_PASSWORD:-mitm-change-me}",
-      ]
-    environment:
-      MITM_WEB_PASSWORD: "${MITM_WEB_PASSWORD:-mitm-change-me}"
-    networks:
-      - isolated
-      - default
-    ports:
-      - "8081:8081"
-      - "4097:4097"
-    tmpfs:
-      - /tmp:size=128M
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "test -s /mitm-ca/mitmproxy-ca-cert.pem && curl -fsS 'http://localhost:8081/?token='$$MITM_WEB_PASSWORD >/dev/null",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    volumes:
-      - mitm-ca:/mitm-ca
 
   mcp-everything:
     extends:
@@ -107,17 +56,20 @@ services:
     depends_on:
       # egress-proxy:
       #   condition: service_healthy
-      mitm-proxy:
-        condition: service_started
+      proxy:
+        condition: service_healthy
     ports:
       - "3001:3001"
+    environment:
+      NODE_EXTRA_CA_CERTS: "/mitm-ca/mitmproxy-ca-cert.pem"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3001/sse').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 15s
-
+    volumes:
+      - mitm-ca:/mitm-ca:ro
   agent-init:
     image: alpine:3.23
     restart: "no"
@@ -139,8 +91,6 @@ services:
         condition: service_completed_successfully
       # egress-proxy:
       #   condition: service_healthy
-      mitm-proxy:
-        condition: service_healthy
       proxy:
         condition: service_healthy
     environment:
@@ -150,8 +100,8 @@ services:
       OPENROUTER_API_KEY: ""
       # OPENCODE_SERVER_PASSWORD: "5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c"
       DENO_CERT: "/mitm-ca/mitmproxy-ca-cert.pem"
-      DENO_AUDIT_PERMISSIONS: "/home/opencode/state/opencode/deno-permissions.audit.jsonl"
       NODE_EXTRA_CA_CERTS: "/mitm-ca/mitmproxy-ca-cert.pem"
+      DENO_AUDIT_PERMISSIONS: "/home/opencode/state/opencode/deno-permissions.audit.jsonl"
       XDG_CONFIG_HOME: "/home/opencode/config"
       # HOME: ""
     extends:

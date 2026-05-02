@@ -65,11 +65,10 @@ services:
       # HTTP_PROXY: "http://egress-proxy:10000"
       # HTTPS_PROXY: "http://egress-proxy:10001"
 
-      # mitmproxy (active)
-      HTTP_PROXY: "http://mitm-proxy:8080"
-      HTTPS_PROXY: "http://mitm-proxy:8080"
+      # workerd proxy (active)
+      HTTP_PROXY: "http://proxy:8080"
+      HTTPS_PROXY: "https://proxy:8443"
       NO_PROXY: "localhost,127.0.0.1"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
 
 networks:
   isolated:

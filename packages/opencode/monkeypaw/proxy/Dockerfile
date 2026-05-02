@@ -5,7 +5,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG NODE_VERSION=24.4.0
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends xz-utils \
+    && apt-get install -y --no-install-recommends openssl xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -24,5 +24,6 @@ RUN set -euo pipefail; \
 WORKDIR /app
 
 COPY packages/opencode/monkeypaw/proxy/main.capnp packages/opencode/monkeypaw/proxy/main.js /app/
+COPY --chmod=755 packages/opencode/monkeypaw/proxy/entrypoint.sh /usr/local/bin/proxy-entrypoint.sh
 
-CMD ["sh", "-lc", "mkdir -p /sockets/internal /sockets/external && rm -f /sockets/internal/permission-broker.sock /sockets/external/debug-http.sock && umask 000 && exec workerd serve /app/main.capnp config --experimental --socket-addr internalBroker=unix:/sockets/internal/permission-broker.sock --socket-addr externalHttp=unix:/sockets/external/debug-http.sock"]
+CMD ["/usr/local/bin/proxy-entrypoint.sh"]

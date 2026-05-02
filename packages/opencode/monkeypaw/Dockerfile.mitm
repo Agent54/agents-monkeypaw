@@ -1,7 +1,0 @@
-FROM mitmproxy/mitmproxy:latest
-
-# Add curl for container-native health checks.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
-

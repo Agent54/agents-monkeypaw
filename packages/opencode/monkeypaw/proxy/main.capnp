@@ -10,13 +10,6 @@ const config :Workerd.Config = (
         tlsOptions = (trustBrowserCas = true),
       ),
     ),
-    (
-      name = "agentServer",
-      external = (
-        address = "agent.monkeypaw_isolated:4097",
-        http = (),
-      ),
-    ),
   ],
 
   sockets = [
@@ -64,7 +57,4 @@ const proxyWorker :Workerd.Worker = (
   ],
   compatibilityFlags = ["nodejs_compat_v2", "experimental"],
   compatibilityDate = "2026-04-23",
-  bindings = [
-    (name = "AGENT", service = "agentServer"),
-  ],
 );

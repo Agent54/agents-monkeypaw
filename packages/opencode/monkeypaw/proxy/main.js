@@ -473,11 +473,21 @@ export const proxy = {
 }
 
 export const agent = {
-  async fetch(request, env) {
+  async fetch(request) {
     const startedAt = Date.now()
+    const url = new URL(request.url)
+    const upstreamUrl = new URL(url.pathname + url.search, "http://agent:4097")
 
     try {
-      const response = await env.AGENT.fetch(request)
+      const headers = proxyHeaders(request.headers)
+      const body =
+        request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer()
+      const response = await fetch(upstreamUrl, {
+        method: request.method,
+        headers,
+        body,
+        redirect: "manual",
+      })
       logHttpExchange("ingress-proxy", request, response, startedAt)
       return response
     } catch (error) {

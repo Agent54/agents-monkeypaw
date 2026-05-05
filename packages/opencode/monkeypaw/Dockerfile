@@ -100,6 +100,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     XDG_STATE_HOME=/home/opencode/state \
     OPENCODE_APP_ROOT=/home/opencode/app \
     OPENCODE_CONFIG_DIR=/home/opencode/config/opencode \
+    OPENCODE_LAUNCH_CWD=/home/opencode/app/dist/deno/src \
+    OPENCODE_MOUNT_ROOT=/stacks \
     OPENCODE_WORKSPACE_ROOT=/stacks/agents/workspaces \
     OPENCODE_WORKTREE_ROOT=/stacks/agents/workspaces/worktree \
     OPENCODE_DATA_DIR=/home/opencode/share/opencode \
@@ -138,7 +140,7 @@ USER opencode
 #     && mkdir -p /home/opencode /workspaces /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
 #     && chown -R opencode:opencode /home/opencode /workspaces
 
-WORKDIR /stacks
+WORKDIR /home/opencode/app/dist/deno/src
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 EXPOSE 4097

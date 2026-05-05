@@ -78,7 +78,7 @@ services:
       [
         "sh",
         "-c",
-        "mkdir -p /stacks/agents/data/data /stacks/agents/workspaces /stacks/agents/data/config /stacks/agents/data/conf /stacks/agents/data/state /stacks/agents/data/cache /stacks/agents/data/cache/deno && chown -R 999:999 /stacks/agents/data/data /stacks/agents/workspaces /stacks/agents/data/config /stacks/agents/data/conf /stacks/agents/data/state /stacks/agents/data/cache",
+        "mkdir -p /stacks/agents/data/data /stacks/agents/workspaces/worktree /stacks/agents/data/config /stacks/agents/data/conf /stacks/agents/data/state /stacks/agents/data/cache /stacks/agents/data/cache/deno && chown 999:999 /stacks/agents/workspaces /stacks/agents/workspaces/worktree && chown -R 999:999 /stacks/agents/data/data /stacks/agents/data/config /stacks/agents/data/conf /stacks/agents/data/state /stacks/agents/data/cache",
       ]
     volumes:
       - '${STACKS_PATH}:/stacks'
@@ -98,6 +98,7 @@ services:
       DENO_PERMISSION_BROKER_PATH: /tmp/opencode-proxy/permission-broker.sock
       NO_PROXY: "mcp-everything,localhost,127.0.0.1"
       OPENCODE_CONFIG_DIR: "/home/opencode/config/opencode"
+      OPENCODE_MOUNT_ROOT: "/stacks"
       OPENCODE_WORKSPACE_ROOT: "/stacks/agents/workspaces"
       OPENCODE_WORKTREE_ROOT: "/stacks/agents/workspaces/worktree"
       OPENROUTER_API_KEY: ""

@@ -9,6 +9,8 @@ readonly cache_dir="${OPENCODE_CACHE_DIR:-/home/opencode/cache/opencode}"
 readonly temp_dir="${TMPDIR:-/tmp/opencode}"
 readonly deno_dir="${DENO_DIR:-/home/opencode/cache/deno}"
 readonly app_root="${OPENCODE_APP_ROOT:-/home/opencode/app/packages/opencode}"
+readonly launch_cwd="${OPENCODE_LAUNCH_CWD:-$app_root/dist/deno}"
+readonly mount_root="${OPENCODE_MOUNT_ROOT:-/stacks}"
 readonly audit_file="${DENO_AUDIT_PERMISSIONS:-/home/opencode/deno-permissions.audit.jsonl}"
 readonly broker_socket="${DENO_PERMISSION_BROKER_PATH:-/home/opencode/monkeypaw/permission-broker.sock}"
 readonly global_config_dir="${XDG_CONFIG_HOME:-/home/opencode/config}/opencode"
@@ -76,7 +78,9 @@ prepare_runtime() {
   require_dir "$global_config_dir"
   require_dir "$OPENCODE_CONFIG_DIR"
   require_dir "$app_root"
+  require_dir "$launch_cwd"
   require_dir "$runtime_cwd"
+  require_dir "$mount_root"
   if [ ! -e "$data_dir/worktree" ]; then
     ln -s "$worktree_root" "$data_dir/worktree"
     return
@@ -91,7 +95,7 @@ prepare_runtime() {
 apply_landlock() {
   local rx=()
   local ro=("$app_root")
-  local rw=("$runtime_cwd" "$workspace_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir" "$audit_file" "$broker_socket")
+  local rw=("$mount_root" "$runtime_cwd" "$workspace_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir" "$audit_file" "$broker_socket")
 
   append_if_exists rx /usr
   append_if_exists rx /bin
@@ -139,6 +143,7 @@ echo "[security] PID=$$ UID=$(id -u) GID=$(id -g)"
 
 apply_resource_limits
 prepare_runtime
+cd "$launch_cwd"
 
 if [ "${LANDLOCK_ENABLED:-true}" != "true" ]; then
   echo "[security] Landlock disabled via LANDLOCK_ENABLED=false"

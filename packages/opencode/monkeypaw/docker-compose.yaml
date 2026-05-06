@@ -99,6 +99,7 @@ services:
       NO_PROXY: "mcp-everything,localhost,127.0.0.1"
       OPENCODE_CONFIG_DIR: "/home/opencode/config/opencode"
       OPENCODE_MOUNT_ROOT: "/stacks"
+      OPENCODE_TEST_HOME: "/stacks"
       OPENCODE_WORKSPACE_ROOT: "/stacks/agents/workspaces"
       OPENCODE_WORKTREE_ROOT: "/stacks/agents/workspaces/worktree"
       OPENROUTER_API_KEY: ""
@@ -107,14 +108,13 @@ services:
       NODE_EXTRA_CA_CERTS: "/mitm-ca/mitmproxy-ca-cert.pem"
       DENO_AUDIT_PERMISSIONS: "/home/opencode/state/opencode/deno-permissions.audit.jsonl"
       XDG_CONFIG_HOME: "/home/opencode/config"
-      # HOME: ""
+      HOME: "/stacks"
     extends:
       file: compose.security.yaml
       service: secured
     user: "opencode"
     networks:
       - isolated
-    working_dir: /stacks
     healthcheck:
       test:
         [

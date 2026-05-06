@@ -147,12 +147,22 @@ function useDirectorySearch(args: {
     if (raw.startsWith("~/")) return { directory: trimTrailing(h || base), path: raw.slice(2) }
 
     const root = rootOf(raw)
+    const home = trimTrailing(h)
+    const full = trimTrailing(raw)
+    if (root && home && (full === home || full.startsWith(home + "/"))) {
+      return { directory: home, path: full.slice(home.length).replace(/^\/+/, "") }
+    }
     if (root) return { directory: trimTrailing(root), path: raw.slice(root.length) }
     return { directory: trimTrailing(base), path: raw }
   }
 
   const dirs = async (dir: string) => {
     const key = trimTrailing(dir)
+    if (key === "/") {
+      const home = trimTrailing(args.home())
+      const name = home.startsWith("/") ? home.split("/").filter(Boolean)[0] : undefined
+      return name ? [{ name, absolute: "/" + name }] : []
+    }
     const existing = cache.get(key)
     if (existing) return existing
 
@@ -213,7 +223,8 @@ function useDirectorySearch(args: {
     for (const part of head) {
       if (!active()) return []
       if (part === "..") {
-        paths = paths.map(parentOf)
+        const home = trimTrailing(args.home())
+        paths = paths.map((p) => (home && trimTrailing(p) === home ? home : parentOf(p)))
         continue
       }
 

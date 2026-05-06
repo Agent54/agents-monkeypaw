@@ -420,6 +420,15 @@ export const layer = Layer.effect(
       return (yield* git.run(args, { cwd: (yield* InstanceState.context).directory })).text()
     })
 
+    const relativePath = (ctx: { directory: string; worktree: string }, input: string) => {
+      if (!path.isAbsolute(input)) return input
+      const full = path.normalize(input)
+      if (AppFileSystem.contains(ctx.directory, full)) return path.relative(ctx.directory, full) || "."
+      if (ctx.worktree !== "/" && AppFileSystem.contains(ctx.worktree, full))
+        return path.relative(ctx.directory, full) || "."
+      return full
+    }
+
     const init = Effect.fn("File.init")(function* () {
       yield* ensure().pipe(Effect.forkIn(scope))
     })
@@ -508,10 +517,11 @@ export const layer = Layer.effect(
       })
     })
 
-    const read: Interface["read"] = Effect.fn("File.read")(function* (file: string) {
-      using _ = log.time("read", { file })
+    const read: Interface["read"] = Effect.fn("File.read")(function* (input: string) {
+      using _ = log.time("read", { file: input })
       const ctx = yield* InstanceState.context
-      const full = path.join(ctx.directory, file)
+      const file = relativePath(ctx, input)
+      const full = path.resolve(ctx.directory, file)
 
       if (!Instance.containsPath(full, ctx)) {
         throw new Error("Access denied: path escapes project directory")
@@ -592,7 +602,8 @@ export const layer = Layer.effect(
         ignored = ig.ignores.bind(ig)
       }
 
-      const resolved = dir ? path.join(ctx.directory, dir) : ctx.directory
+      const target = dir ? relativePath(ctx, dir) : ""
+      const resolved = target ? path.resolve(ctx.directory, target) : ctx.directory
       if (!Instance.containsPath(resolved, ctx)) {
         throw new Error("Access denied: path escapes project directory")
       }
@@ -626,9 +637,10 @@ export const layer = Layer.effect(
       type?: "file" | "directory"
     }) {
       yield* ensure()
+      const ctx = yield* InstanceState.context
       const { cache } = yield* InstanceState.get(state)
 
-      const query = input.query.trim()
+      const query = relativePath(ctx, input.query).trim()
       const limit = input.limit ?? 100
       const kind = input.type ?? (input.dirs === false ? "file" : "all")
       log.info("search", { query, kind })

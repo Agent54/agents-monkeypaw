@@ -112,20 +112,26 @@ export function createPathHelpers(scope: () => string) {
     const windows = /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
     const canonRoot = windows ? root.replace(/\\/g, "/").toLowerCase() : root.replace(/\\/g, "/")
     const canonPath = windows ? path.replace(/\\/g, "/").toLowerCase() : path.replace(/\\/g, "/")
-    if (
+    const scoped =
       canonPath.startsWith(canonRoot) &&
       (canonRoot.endsWith("/") || canonPath === canonRoot || canonPath[canonRoot.length] === "/")
-    ) {
+    if (scoped) {
       // Slice from original path to preserve native separators
       path = path.slice(root.length)
     }
 
-    if (path.startsWith("./") || path.startsWith(".\\")) {
-      path = path.slice(2)
+    if (scoped && (path.startsWith("/") || path.startsWith("\\"))) {
+      path = path.slice(1)
     }
 
-    if (path.startsWith("/") || path.startsWith("\\")) {
-      path = path.slice(1)
+    const absolute =
+      path.startsWith("/") ||
+      path.startsWith("\\") ||
+      /^[A-Za-z]:[\\/]/.test(path)
+    if (absolute) return path
+
+    if (path.startsWith("./") || path.startsWith(".\\")) {
+      path = path.slice(2)
     }
     return path
   }

@@ -13,12 +13,21 @@ describe("file path helpers", () => {
     expect(path.pathFromTab("other://src/app.ts")).toBeUndefined()
   })
 
+  test("preserves absolute paths outside the workspace root", () => {
+    const path = createPathHelpers(() => "/repo/packages/app")
+    expect(path.normalize("/repo/README.md")).toBe("/repo/README.md")
+    expect(path.normalize("/stacks/agents/opencode/packages/opencode/src/file/index.ts")).toBe(
+      "/stacks/agents/opencode/packages/opencode/src/file/index.ts",
+    )
+  })
+
   test("normalizes Windows absolute paths with mixed separators", () => {
     const path = createPathHelpers(() => "C:\\repo")
     expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src\\app.ts")
     expect(path.normalize("C:/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("file://C:/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
+    expect(path.normalize("D:\\repo\\src\\app.ts")).toBe("D:\\repo\\src\\app.ts")
   })
 
   test("keeps query/hash stripping behavior stable", () => {

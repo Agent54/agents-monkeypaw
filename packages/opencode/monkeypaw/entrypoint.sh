@@ -18,6 +18,7 @@ readonly runtime_cwd="$(pwd -P)"
 export HOME="${HOME:-$mount_root}"
 export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-/home/opencode/config/opencode}"
 export OPENCODE_TEST_HOME="${OPENCODE_TEST_HOME:-$mount_root}"
+export OPENCODE_CONFIG_CONTENT="${OPENCODE_CONFIG_CONTENT:-{\"username\":\"opencode\"}}"
 export DENO_AUDIT_PERMISSIONS="${DENO_AUDIT_PERMISSIONS:-$audit_file}"
 export DENO_TRACE_PERMISSIONS="${DENO_TRACE_PERMISSIONS:-1}"
 export DENO_PERMISSION_BROKER_PATH="${DENO_PERMISSION_BROKER_PATH:-$broker_socket}"
@@ -27,6 +28,7 @@ require_dir() {
     return
   fi
   echo "[security] missing directory: $1" >&2
+  ls -ldn "$1" "$(dirname "$1")" >&2 || true
   exit 1
 }
 
@@ -36,6 +38,8 @@ require_writable_dir() {
     return
   fi
   echo "[security] directory is not writable: $1" >&2
+  ls -ldn "$1" >&2 || true
+  mount | grep " /stacks " >&2 || true
   exit 1
 }
 
@@ -67,7 +71,8 @@ apply_resource_limits() {
 }
 
 prepare_runtime() {
-  mkdir -p "$workspace_root" "$worktree_root" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir"
+  mkdir -p "$temp_dir"
+  require_writable_dir "$mount_root"
   require_writable_dir "$workspace_root"
   require_writable_dir "$worktree_root"
   require_writable_dir "$data_dir"
@@ -82,7 +87,6 @@ prepare_runtime() {
   require_dir "$app_root"
   require_dir "$launch_cwd"
   require_dir "$runtime_cwd"
-  require_dir "$mount_root"
   if [ ! -e "$data_dir/worktree" ]; then
     ln -s "$worktree_root" "$data_dir/worktree"
     return

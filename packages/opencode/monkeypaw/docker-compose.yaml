@@ -71,25 +71,12 @@ services:
       start_period: 15s
     volumes:
       - mitm-ca:/mitm-ca:ro
-  agent-init:
-    image: alpine:3.23
-    restart: "no"
-    command:
-      [
-        "sh",
-        "-c",
-        "mkdir -p /stacks/agents/data/data /stacks/agents/workspaces/worktree /stacks/agents/data/config /stacks/agents/data/conf /stacks/agents/data/state /stacks/agents/data/cache /stacks/agents/data/cache/deno && chown 999:999 /stacks/agents/workspaces /stacks/agents/workspaces/worktree && chown -R 999:999 /stacks/agents/data/data /stacks/agents/data/config /stacks/agents/data/conf /stacks/agents/data/state /stacks/agents/data/cache",
-      ]
-    volumes:
-      - '${STACKS_PATH}:/stacks'
   agent:
     image: opencode-monkeypaw-agent:local
     build:
       context: ../../..
       dockerfile: packages/opencode/monkeypaw/Dockerfile
     depends_on:
-      agent-init:
-        condition: service_completed_successfully
       # egress-proxy:
       #   condition: service_healthy
       proxy:
@@ -100,7 +87,7 @@ services:
       GIT_CONFIG_KEY_0: "safe.directory"
       GIT_CONFIG_VALUE_0: "*"
       NO_PROXY: "mcp-everything,localhost,127.0.0.1"
-      OPENCODE_CONFIG_DIR: "/home/opencode/config/opencode"
+      OPENCODE_CONFIG_DIR: "/stacks/agents/data/conf"
       OPENCODE_MOUNT_ROOT: "/stacks"
       OPENCODE_TEST_HOME: "/stacks"
       OPENCODE_WORKSPACE_ROOT: "/stacks/agents/workspaces"
@@ -109,13 +96,23 @@ services:
       # OPENCODE_SERVER_PASSWORD: "5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c"
       DENO_CERT: "/mitm-ca/mitmproxy-ca-cert.pem"
       NODE_EXTRA_CA_CERTS: "/mitm-ca/mitmproxy-ca-cert.pem"
-      DENO_AUDIT_PERMISSIONS: "/home/opencode/state/opencode/deno-permissions.audit.jsonl"
-      XDG_CONFIG_HOME: "/home/opencode/config"
+      DENO_AUDIT_PERMISSIONS: "/stacks/agents/data/state/opencode/deno-permissions.audit.jsonl"
+      DENO_DIR: "/stacks/agents/data/cache/deno"
+      OPENCODE_DATA_DIR: "/stacks/agents/data/data"
+      OPENCODE_STATE_DIR: "/stacks/agents/data/state/opencode"
+      OPENCODE_CACHE_DIR: "/stacks/agents/data/cache/opencode"
+      XDG_CONFIG_HOME: "/stacks/agents/data/config"
+      XDG_CACHE_HOME: "/stacks/agents/data/cache"
+      XDG_DATA_HOME: "/stacks/agents/data/data"
+      XDG_STATE_HOME: "/stacks/agents/data/state"
       HOME: "/stacks"
     extends:
       file: compose.security.yaml
       service: secured
-    user: "opencode"
+    # Bind-mounted stacks should be owned by the host user and run with matching
+    # numeric IDs, e.g. HOST_UID="$(id -u)" HOST_GID="$(id -g)".
+    # Without host mounts, the image-owned fallback runs as the built-in user.
+    user: "${HOST_UID:-opencode}:${HOST_GID:-opencode}"
     networks:
       - isolated
     healthcheck:
@@ -129,12 +126,7 @@ services:
       retries: 3
       start_period: 15s
     volumes:
-      - '${STACKS_PATH}:/stacks'
-      - '${STACKS_PATH}/agents/data/data:/home/opencode/share/opencode'
-      - '${STACKS_PATH}/agents/data/config:/home/opencode/config'
-      - '${STACKS_PATH}/agents/data/conf:/home/opencode/config/opencode'
-      - '${STACKS_PATH}/agents/data/state:/home/opencode/state'
-      - '${STACKS_PATH}/agents/data/cache:/home/opencode/cache'
+      - '${STACKS_PATH}:/stacks:rw'
       - mitm-ca:/mitm-ca:ro
       - proxy-internal:/tmp/opencode-proxy
     tmpfs:

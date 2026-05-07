@@ -87,13 +87,14 @@ RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
 
 FROM ubuntu-base
 
+    # GIT_CONFIG_COUNT=1 \
+    # GIT_CONFIG_KEY_0=safe.directory \
+    # GIT_CONFIG_VALUE_0=* \
+
 ENV DEBIAN_FRONTEND=noninteractive \
     DENO_INSTALL=/usr/local \
     DENO_AUDIT_PERMISSIONS=/stacks/agents/data/state/opencode/deno-permissions.audit.jsonl \
     DENO_TRACE_PERMISSIONS=1 \
-    GIT_CONFIG_COUNT=1 \
-    GIT_CONFIG_KEY_0=safe.directory \
-    GIT_CONFIG_VALUE_0=* \
     HOME=/stacks \
     TMPDIR=/tmp/opencode \
     DENO_DIR=/stacks/agents/data/cache/deno \

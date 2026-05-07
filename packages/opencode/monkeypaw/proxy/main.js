@@ -1,4 +1,5 @@
 import { connect } from "cloudflare:sockets"
+import { recordPermissionRequest, servePermissionUi } from "./ui.js"
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -127,6 +128,7 @@ async function handlePermissionBrokerSession(socket) {
       }
 
       const response = { id: request.id, result: "allow" }
+      recordPermissionRequest(request)
       console.log(`[permission-broker] ${summarizePermissionLog(request)}`)
 
       try {
@@ -431,6 +433,9 @@ export const permissionBroker = {
 
 export const debugHttp = {
   async fetch(request) {
+    const ui = servePermissionUi(request)
+    if (ui) return ui
+
     const body = await readBody(request)
     console.log(
       `[debug-http] ${request.method} ${request.url} headers=${compactJson(normalizeHeaders(request.headers))} body=${compactJson(body)}`,
@@ -474,6 +479,9 @@ export const proxy = {
 
 export const agent = {
   async fetch(request) {
+    const ui = servePermissionUi(request)
+    if (ui) return ui
+
     const startedAt = Date.now()
     const url = new URL(request.url)
     const upstreamUrl = new URL(url.pathname + url.search, "http://agent:4097")

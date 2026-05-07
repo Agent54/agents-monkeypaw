@@ -54,6 +54,10 @@ const proxyWorker :Workerd.Worker = (
       name = "main",
       esModule = embed "main.js",
     ),
+    (
+      name = "ui.js",
+      esModule = embed "ui.js",
+    ),
   ],
   compatibilityFlags = ["nodejs_compat_v2", "experimental"],
   compatibilityDate = "2026-04-23",

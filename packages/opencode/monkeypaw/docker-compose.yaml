@@ -83,9 +83,9 @@ services:
         condition: service_healthy
     environment:
       DENO_PERMISSION_BROKER_PATH: /tmp/opencode-proxy/permission-broker.sock
-      GIT_CONFIG_COUNT: "1"
-      GIT_CONFIG_KEY_0: "safe.directory"
-      GIT_CONFIG_VALUE_0: "*"
+      # GIT_CONFIG_COUNT: "1"
+      # GIT_CONFIG_KEY_0: "safe.directory"
+      # GIT_CONFIG_VALUE_0: "*"
       NO_PROXY: "mcp-everything,localhost,127.0.0.1"
       OPENCODE_CONFIG_DIR: "/stacks/agents/data/conf"
       OPENCODE_MOUNT_ROOT: "/stacks"

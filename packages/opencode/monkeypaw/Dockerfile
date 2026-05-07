@@ -99,7 +99,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DENO_DIR=/stacks/agents/data/cache/deno \
     XDG_CONFIG_HOME=/stacks/agents/data/config \
     XDG_CACHE_HOME=/stacks/agents/data/cache \
-    XDG_DATA_HOME=/stacks/agents/data/data \
+    XDG_DATA_HOME=/stacks/agents/data \
     XDG_STATE_HOME=/stacks/agents/data/state \
     OPENCODE_APP_ROOT=/home/opencode/app \
     OPENCODE_CONFIG_DIR=/stacks/agents/data/conf \
@@ -108,7 +108,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OPENCODE_TEST_HOME=/stacks \
     OPENCODE_WORKSPACE_ROOT=/stacks/agents/workspaces \
     OPENCODE_WORKTREE_ROOT=/stacks/agents/workspaces/worktree \
-    OPENCODE_DATA_DIR=/stacks/agents/data/data \
+    OPENCODE_DATA_DIR=/stacks/agents/data/opencode \
     OPENCODE_STATE_DIR=/stacks/agents/data/state/opencode \
     OPENCODE_CACHE_DIR=/stacks/agents/data/cache/opencode
 
@@ -118,10 +118,10 @@ RUN groupadd --system opencode \
     && useradd --system --gid opencode --home-dir /home/opencode --create-home --shell /bin/bash opencode \
     && mkdir -p /home/opencode/config/opencode /home/opencode/cache/opencode /home/opencode/cache/deno \
         /home/opencode/share/opencode /home/opencode/state/opencode /home/opencode/monkeypaw \
-        /stacks/agents/data/data /stacks/agents/data/config/opencode /stacks/agents/data/conf \
+        /stacks/agents/data/opencode /stacks/agents/data/config/opencode /stacks/agents/data/conf \
         /stacks/agents/data/state/opencode /stacks/agents/data/cache/opencode /stacks/agents/data/cache/deno \
         /stacks/agents/workspaces/worktree /tmp/opencode \
-    && ln -sfn /stacks/agents/workspaces/worktree /stacks/agents/data/data/worktree \
+    && ln -sfn /stacks/agents/workspaces/worktree /stacks/agents/data/opencode/worktree \
     && chown -R opencode:opencode /home/opencode /stacks /tmp/opencode \
     && chmod a+rx /home /home/opencode \
     && chmod -R a+rX,a+w /home/opencode/config /home/opencode/cache /home/opencode/share /home/opencode/state /home/opencode/monkeypaw /stacks /tmp/opencode

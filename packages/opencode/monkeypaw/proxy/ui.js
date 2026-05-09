@@ -1,6 +1,8 @@
 const encoder = new TextEncoder()
 const events = []
 const clients = new Set()
+const maxClients = 4
+const streamTtl = 5 * 60 * 1000
 
 const html = `<!doctype html>
 <html lang="en">
@@ -231,33 +233,67 @@ function permissionSummary(request) {
 
 export function recordPermissionRequest(request) {
   const event = permissionEvent(request)
+  const chunk = sse("permission", event)
   events.push(event)
   if (events.length > 100) events.shift()
-  clients.forEach((client) => {
-    if (!client.active) return
-    client.controller.enqueue(sse("permission", event))
-  })
+  clients.forEach((client) => sendClient(client, chunk))
 }
 
-function eventStream() {
+function closeClient(client) {
+  if (!client?.active) return
+  client.active = false
+  clearInterval(client.heartbeat)
+  clearTimeout(client.timeout)
+  client.request.signal.removeEventListener("abort", client.abort)
+  clients.delete(client)
+
+  try {
+    client.controller.close()
+  } catch {}
+}
+
+function sendClient(client, chunk) {
+  if (!client.active) return
+  try {
+    client.controller.enqueue(chunk)
+  } catch {
+    closeClient(client)
+  }
+}
+
+function pruneClients() {
+  Array.from(clients)
+    .slice(0, Math.max(0, clients.size - maxClients))
+    .forEach(closeClient)
+}
+
+function eventStream(request) {
   let client
   const stream = new ReadableStream({
     start(controller) {
-      client = { active: true, controller }
+      client = {
+        abort: undefined,
+        active: true,
+        controller,
+        heartbeat: undefined,
+        request,
+        timeout: undefined,
+      }
+      client.abort = () => closeClient(client)
       clients.add(client)
-      controller.enqueue(sse("ready", { ok: true }))
-      events.forEach((event) => controller.enqueue(sse("permission", event)))
+      pruneClients()
+      request.signal.addEventListener("abort", client.abort, { once: true })
+      sendClient(client, encoder.encode("retry: 5000\n\n"))
+      sendClient(client, sse("ready", { ok: true }))
+      events.forEach((event) => sendClient(client, sse("permission", event)))
       client.heartbeat = setInterval(() => {
-        if (!client.active) return
-        controller.enqueue(encoder.encode(": ping\n\n"))
+        sendClient(client, encoder.encode(": ping\n\n"))
       }, 15000)
+      client.timeout = setTimeout(() => closeClient(client), streamTtl)
     },
 
     cancel() {
-      if (!client) return
-      client.active = false
-      clearInterval(client.heartbeat)
-      clients.delete(client)
+      closeClient(client)
     },
   })
 
@@ -279,5 +315,5 @@ export function servePermissionUi(request) {
   if (url.pathname === "/permissions/ui.js") {
     return new Response(script, { headers: headers("text/javascript; charset=utf-8") })
   }
-  if (url.pathname === "/permissions/events") return eventStream()
+  if (url.pathname === "/permissions/events") return eventStream(request)
 }

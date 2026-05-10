@@ -42,11 +42,16 @@ const html = `<!doctype html>
       }
 
       header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
         display: flex;
         align-items: end;
-        justify-content: space-between;
+        justify-content: end;
         gap: 24px;
         margin-bottom: 18px;
+        background: var(--bg);
+        padding: 12px 0;
       }
 
       h1 {
@@ -104,6 +109,9 @@ const html = `<!doctype html>
         border: 1px solid var(--line);
         border-radius: 10px;
         background: var(--card);
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
         padding: 16px;
       }
 
@@ -135,8 +143,7 @@ const html = `<!doctype html>
         padding-top: 12px;
         color: var(--ink);
         overflow-x: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
+        white-space: pre;
       }
 
       .event[open] pre {
@@ -154,7 +161,8 @@ const html = `<!doctype html>
 
       .value {
         color: var(--ink);
-        white-space: pre-wrap;
+        overflow-x: auto;
+        white-space: pre;
       }
 
       @keyframes rise {
@@ -168,10 +176,6 @@ const html = `<!doctype html>
   <body>
     <main>
       <header>
-        <section>
-          <h1>Monkeypaw permissions</h1>
-          <p>Live permission and proxy events observed by the proxy.</p>
-        </section>
         <div class="actions">
           <button id="clear" type="button">clear</button>
           <div id="status">connecting</div>
@@ -271,12 +275,15 @@ function permissionEvent(request) {
 }
 
 function permissionResponse(request) {
+  if (request.permission === "run" && request.value === null) {
+    return { id: request.id, result: "deny" }
+  }
   return { id: request.id, result: "allow" }
 }
 
 function permissionSummary(request) {
   if (typeof request.value === "string") return request.value
-  if (request.value === null) return request.permission ?? "permission"
+  if (request.value === null) return "-"
   if (request.value === undefined) return "-"
   return JSON.stringify(request.value, null, 2)
 }

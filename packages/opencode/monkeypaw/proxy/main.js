@@ -57,6 +57,7 @@ function shortTimestamp(value) {
 
 function permissionValue(request) {
   if (typeof request.value === "string") return request.value
+  if (request.value === null) return "-"
   if (request.value === undefined) return "-"
   return compactJson(request.value)
 }

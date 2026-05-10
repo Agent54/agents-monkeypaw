@@ -81,6 +81,8 @@ RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
 
 COPY . /src
 
+RUN bun run packages/opencode/monkeypaw/script/patch-webfetch-htmlrewriter.js
+
 RUN --mount=type=cache,target=/opt/bun/install/cache,sharing=locked \
   --mount=type=cache,target=/root/.cache,sharing=locked \
   cd packages/opencode && bun run script/deno-build.ts --single

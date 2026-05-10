@@ -181,6 +181,10 @@ function proxyHeaders(headers) {
   return result
 }
 
+function isWebSocketUpgrade(request) {
+  return request.headers.get("upgrade")?.toLowerCase() === "websocket"
+}
+
 function headerValue(headers, name) {
   return headers.get(name) ?? "-"
 }
@@ -557,6 +561,12 @@ export const agent = {
     const upstreamUrl = new URL(url.pathname + url.search, "http://agent:4097")
 
     try {
+      if (isWebSocketUpgrade(request)) {
+        const response = await fetch(new Request(upstreamUrl, request))
+        logHttpExchange("ingress-proxy", request, response, startedAt, { upgrade: "websocket" })
+        return response
+      }
+
       const headers = proxyHeaders(request.headers)
       const body =
         request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer()

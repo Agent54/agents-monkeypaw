@@ -72,7 +72,7 @@ apply_resource_limits() {
 
 prepare_proxy_environment() {
   local proxy_url="${MONKEYPAW_PROXY_URL:-http://proxy:8080}"
-  local no_proxy_value="${NO_PROXY:-${no_proxy:-localhost,127.0.0.1}}"
+  local no_proxy_value="${NO_PROXY:-${no_proxy:-agent,proxy,mcp-everything,localhost,127.0.0.1}}"
 
   export HTTP_PROXY="${HTTP_PROXY:-$proxy_url}"
   export HTTPS_PROXY="${HTTPS_PROXY:-$proxy_url}"
@@ -86,8 +86,20 @@ prepare_proxy_environment() {
   if [ "$https_proxy" = "https://proxy:8443" ]; then
     export https_proxy="$proxy_url"
   fi
+  case ",$no_proxy_value," in
+    *,proxy,*) ;;
+    *) no_proxy_value="proxy,$no_proxy_value" ;;
+  esac
+  case ",$no_proxy_value," in
+    *,agent,*) ;;
+    *) no_proxy_value="agent,$no_proxy_value" ;;
+  esac
+  case ",$no_proxy_value," in
+    *,mcp-everything,*) ;;
+    *) no_proxy_value="mcp-everything,$no_proxy_value" ;;
+  esac
   export NO_PROXY="$no_proxy_value"
-  export no_proxy="${no_proxy:-$NO_PROXY}"
+  export no_proxy="$NO_PROXY"
 }
 
 prepare_ca_bundle() {

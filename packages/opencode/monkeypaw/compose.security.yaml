@@ -72,8 +72,8 @@ services:
       http_proxy: "http://proxy:8080"
       https_proxy: "http://proxy:8080"
       all_proxy: "http://proxy:8080"
-      NO_PROXY: "localhost,127.0.0.1"
-      no_proxy: "localhost,127.0.0.1"
+      NO_PROXY: "agent,proxy,mcp-everything,localhost,127.0.0.1"
+      no_proxy: "agent,proxy,mcp-everything,localhost,127.0.0.1"
 
 networks:
   isolated:

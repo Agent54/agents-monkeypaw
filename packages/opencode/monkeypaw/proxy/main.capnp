@@ -16,7 +16,7 @@ const config :Workerd.Config = (
     (
       name = "internalBroker",
       tcp = (),
-      service = (name = "proxy", entrypoint = "permissionBroker"),
+      service = (name = "proxy", entrypoint = "proxy"),
     ),
     (
       name = "externalHttp",
@@ -43,12 +43,26 @@ const config :Workerd.Config = (
     (
       name = "agentHttp",
       http = (),
-      service = (name = "proxy", entrypoint = "agent"),
+      service = (name = "proxy", entrypoint = "proxy"),
     ),
   ],
 );
 
 const proxyWorker :Workerd.Worker = (
+  bindings = [
+    (
+      name = "EVENT_BUS",
+      durableObjectNamespace = "EventBus",
+    ),
+  ],
+  durableObjectNamespaces = [
+    (
+      className = "EventBus",
+      uniqueKey = "opencode-monkeypaw-proxy-event-bus-v1",
+      preventEviction = true,
+    ),
+  ],
+  durableObjectStorage = (inMemory = void),
   modules = [
     (
       name = "main",

@@ -1,5 +1,7 @@
 import { connect } from "cloudflare:sockets"
-import { recordPermissionRequest, servePermissionUi } from "./ui.js"
+import { EventBus, decidePermission, publishEvent, recordProxyEvent, servePermissionUi } from "./ui.js"
+
+export { EventBus }
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -12,6 +14,12 @@ function log(event, value) {
     return
   }
   console.log(`[proxy] ${event}`, value)
+}
+
+function publishUiEvent(env, type, event) {
+  publishEvent(env, type, event).catch((error) => {
+    log("ui event publish failed", error?.stack ?? String(error))
+  })
 }
 
 function clip(value, max = 240) {
@@ -113,7 +121,7 @@ async function* readLines(readable) {
   if (trimmed) yield trimmed
 }
 
-async function handlePermissionBrokerSession(socket) {
+async function handlePermissionBrokerSession(socket, env) {
   const sessionId = nextSessionId++
   const writer = socket.writable.getWriter()
 
@@ -127,8 +135,10 @@ async function handlePermissionBrokerSession(socket) {
         throw error
       }
 
-      const response = { id: request.id, result: "allow" }
-      recordPermissionRequest(request)
+      const response = await decidePermission(env, request).catch((error) => {
+        log("permission decision failed", error?.stack ?? String(error))
+        return { id: request.id, result: "allow" }
+      })
       console.log(`[permission-broker] ${summarizePermissionLog(request)}`)
 
       try {
@@ -325,7 +335,7 @@ async function writeSimpleResponse(socket, status, statusText, body) {
   }
 }
 
-async function handleConnectTunnel(socket, request, reader, rest, startedAt) {
+async function handleConnectTunnel(socket, request, reader, rest, startedAt, env) {
   const authority = parseAuthority(request.target, 443)
   const upstream = connect(authority)
 
@@ -333,6 +343,15 @@ async function handleConnectTunnel(socket, request, reader, rest, startedAt) {
     await upstream.opened
   } catch (error) {
     logHttpFailure("egress-proxy", `CONNECT ${request.target}`, startedAt, error)
+    publishUiEvent(env, "proxy", recordProxyEvent({
+      duration: Date.now() - startedAt,
+      error: clip(error?.message ?? String(error)),
+      method: "CONNECT",
+      status: 502,
+      statusText: "Bad Gateway",
+      target: request.target,
+      version: request.version,
+    }))
     try {
       upstream.close()
     } catch {}
@@ -349,6 +368,14 @@ async function handleConnectTunnel(socket, request, reader, rest, startedAt) {
   }
 
   logProxyEvent("egress-proxy", `CONNECT ${request.target} -> 200 tunnel`, startedAt)
+  publishUiEvent(env, "proxy", recordProxyEvent({
+    duration: Date.now() - startedAt,
+    method: "CONNECT",
+    status: 200,
+    statusText: "Connection Established",
+    target: request.target,
+    version: request.version,
+  }))
 
   const clientToUpstream = streamWithPrefix(reader, rest).pipeTo(upstream.writable)
   const upstreamToClient = upstream.readable.pipeTo(socket.writable)
@@ -363,7 +390,7 @@ async function handleConnectTunnel(socket, request, reader, rest, startedAt) {
   } catch {}
 }
 
-async function handleForwardProxy(socket, request, reader, rest, startedAt) {
+async function handleForwardProxy(socket, request, reader, rest, startedAt, env) {
   const url = requestUrl(request.target, request.headers)
   const headers = proxyHeaders(request.headers)
   const body =
@@ -390,11 +417,21 @@ async function handleForwardProxy(socket, request, reader, rest, startedAt) {
       version: request.version,
     },
   )
+  publishUiEvent(env, "proxy", recordProxyEvent({
+    bytes: headerValue(upstream.headers, "content-length"),
+    contentType: headerValue(upstream.headers, "content-type"),
+    duration: Date.now() - startedAt,
+    method: request.method,
+    status: upstream.status,
+    statusText: upstream.statusText || "-",
+    url: url.toString(),
+    version: request.version,
+  }))
 
   await writeResponse(socket, upstream)
 }
 
-async function handleProxySocket(socket) {
+async function handleProxySocket(socket, env) {
   const startedAt = Date.now()
 
   try {
@@ -402,11 +439,11 @@ async function handleProxySocket(socket) {
     const request = parseRequestHead(parsed.head)
 
     if (request.method === "CONNECT") {
-      await handleConnectTunnel(socket, request, parsed.reader, parsed.rest, startedAt)
+      await handleConnectTunnel(socket, request, parsed.reader, parsed.rest, startedAt, env)
       return
     }
 
-    await handleForwardProxy(socket, request, parsed.reader, parsed.rest, startedAt)
+    await handleForwardProxy(socket, request, parsed.reader, parsed.rest, startedAt, env)
     try {
       socket.close()
     } catch {}
@@ -421,21 +458,54 @@ async function handleProxySocket(socket) {
   }
 }
 
+async function handleMergedSocket(socket, env) {
+  const reader = socket.readable.getReader()
+
+  try {
+    const initial = await reader.read()
+    if (initial.done) {
+      reader.releaseLock()
+      try {
+        socket.close()
+      } catch {}
+      return
+    }
+
+    const first = initial.value.find((byte) => byte !== 9 && byte !== 10 && byte !== 13 && byte !== 32)
+    const wrapped = {
+      readable: streamWithPrefix(reader, initial.value),
+      writable: socket.writable,
+      close() {
+        socket.close()
+      },
+    }
+
+    if (first === 123) {
+      await handlePermissionBrokerSession(wrapped, env)
+      return
+    }
+
+    await handleProxySocket(wrapped, env)
+  } catch (error) {
+    try {
+      reader.releaseLock()
+    } catch {}
+    throw error
+  }
+}
+
 export const permissionBroker = {
   async fetch() {
     return new Response("permission-broker is a raw socket service; use connect().", { status: 404 })
   },
 
-  async connect(socket) {
-    await handlePermissionBrokerSession(socket)
+  async connect(socket, env) {
+    await handlePermissionBrokerSession(socket, env)
   },
 }
 
 export const debugHttp = {
   async fetch(request) {
-    const ui = servePermissionUi(request)
-    if (ui) return ui
-
     const body = await readBody(request)
     console.log(
       `[debug-http] ${request.method} ${request.url} headers=${compactJson(normalizeHeaders(request.headers))} body=${compactJson(body)}`,
@@ -468,20 +538,19 @@ export const debugHttp = {
 }
 
 export const proxy = {
-  async fetch() {
-    return new Response("proxy socket service is raw TCP; use connect().\n", { status: 404 })
+  async fetch(request, env) {
+    const ui = servePermissionUi(request, env)
+    if (ui) return ui
+    return agent.fetch(request)
   },
 
-  async connect(socket) {
-    await handleProxySocket(socket)
+  async connect(socket, env) {
+    await handleMergedSocket(socket, env)
   },
 }
 
 export const agent = {
   async fetch(request) {
-    const ui = servePermissionUi(request)
-    if (ui) return ui
-
     const startedAt = Date.now()
     const url = new URL(request.url)
     const upstreamUrl = new URL(url.pathname + url.search, "http://agent:4097")

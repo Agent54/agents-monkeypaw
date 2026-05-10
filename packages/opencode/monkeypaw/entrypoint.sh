@@ -70,6 +70,49 @@ apply_resource_limits() {
   ulimit -f 1048576 2>/dev/null || true
 }
 
+prepare_proxy_environment() {
+  local proxy_url="${MONKEYPAW_PROXY_URL:-http://proxy:8080}"
+  local no_proxy_value="${NO_PROXY:-${no_proxy:-localhost,127.0.0.1}}"
+
+  export HTTP_PROXY="${HTTP_PROXY:-$proxy_url}"
+  export HTTPS_PROXY="${HTTPS_PROXY:-$proxy_url}"
+  export ALL_PROXY="${ALL_PROXY:-$proxy_url}"
+  if [ "$HTTPS_PROXY" = "https://proxy:8443" ]; then
+    export HTTPS_PROXY="$proxy_url"
+  fi
+  export http_proxy="${http_proxy:-$HTTP_PROXY}"
+  export https_proxy="${https_proxy:-$HTTPS_PROXY}"
+  export all_proxy="${all_proxy:-$ALL_PROXY}"
+  if [ "$https_proxy" = "https://proxy:8443" ]; then
+    export https_proxy="$proxy_url"
+  fi
+  export NO_PROXY="$no_proxy_value"
+  export no_proxy="${no_proxy:-$NO_PROXY}"
+}
+
+prepare_ca_bundle() {
+  local system_bundle="/etc/ssl/certs/ca-certificates.crt"
+  local monkeypaw_ca="/mitm-ca/mitmproxy-ca-cert.pem"
+  local bundle="$temp_dir/ca-certificates-with-monkeypaw.pem"
+
+  if [ ! -s "$system_bundle" ]; then
+    return
+  fi
+
+  if [ -s "$monkeypaw_ca" ]; then
+    cat "$system_bundle" "$monkeypaw_ca" > "$bundle"
+  else
+    cp "$system_bundle" "$bundle"
+  fi
+
+  export CURL_CA_BUNDLE="$bundle"
+  export SSL_CERT_FILE="$bundle"
+  export REQUESTS_CA_BUNDLE="$bundle"
+  export GIT_SSL_CAINFO="$bundle"
+  export DENO_CERT="$bundle"
+  export NODE_EXTRA_CA_CERTS="$bundle"
+}
+
 prepare_runtime() {
   mkdir -p "$temp_dir"
   require_writable_dir "$mount_root"
@@ -148,7 +191,9 @@ echo "[security] OpenCode secure entrypoint starting"
 echo "[security] PID=$$ UID=$(id -u) GID=$(id -g)"
 
 apply_resource_limits
+prepare_proxy_environment
 prepare_runtime
+prepare_ca_bundle
 cd "$launch_cwd"
 
 if [ "${LANDLOCK_ENABLED:-true}" != "true" ]; then

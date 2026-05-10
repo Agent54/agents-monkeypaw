@@ -96,6 +96,7 @@ services:
       # OPENCODE_SERVER_PASSWORD: "5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c"
       DENO_CERT: "/mitm-ca/mitmproxy-ca-cert.pem"
       NODE_EXTRA_CA_CERTS: "/mitm-ca/mitmproxy-ca-cert.pem"
+      no_proxy: "mcp-everything,localhost,127.0.0.1"
       DENO_AUDIT_PERMISSIONS: "/stacks/agents/data/state/opencode/deno-permissions.audit.jsonl"
       DENO_DIR: "/stacks/agents/data/cache/deno"
       OPENCODE_DATA_DIR: "/stacks/agents/data/opencode"

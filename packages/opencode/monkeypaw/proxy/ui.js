@@ -70,6 +70,26 @@ const html = `<!doctype html>
         white-space: nowrap;
       }
 
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--card);
+        color: var(--ink);
+        cursor: pointer;
+        font: inherit;
+        padding: 8px 12px;
+      }
+
+      button:hover {
+        border-color: var(--muted);
+      }
+
       #status[data-connected="true"] {
         color: var(--accent);
       }
@@ -152,7 +172,10 @@ const html = `<!doctype html>
           <h1>Monkeypaw permissions</h1>
           <p>Live permission and proxy events observed by the proxy.</p>
         </section>
-        <div id="status">connecting</div>
+        <div class="actions">
+          <button id="clear" type="button">clear</button>
+          <div id="status">connecting</div>
+        </div>
       </header>
       <section id="log">
         <article class="empty">Waiting for permission or proxy events...</article>
@@ -163,6 +186,7 @@ const html = `<!doctype html>
 
 const script = `const status = document.querySelector("#status")
 const log = document.querySelector("#log")
+const clear = document.querySelector("#clear")
 
 function render(event) {
   document.querySelector(".empty")?.remove()
@@ -209,6 +233,17 @@ function connect() {
   })
 }
 
+clear.addEventListener("click", () => {
+  log.replaceChildren(emptyState())
+})
+
+function emptyState() {
+  const item = document.createElement("article")
+  item.className = "empty"
+  item.textContent = "Waiting for permission or proxy events..."
+  return item
+}
+
 connect()
 `
 
@@ -241,6 +276,7 @@ function permissionResponse(request) {
 
 function permissionSummary(request) {
   if (typeof request.value === "string") return request.value
+  if (request.value === null) return request.permission ?? "permission"
   if (request.value === undefined) return "-"
   return JSON.stringify(request.value, null, 2)
 }

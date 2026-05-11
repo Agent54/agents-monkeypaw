@@ -79,7 +79,8 @@ function renderOrder() {
 function createRow(resource) {
   const row = document.createElement("details")
   row.className = "resource"
-  row.innerHTML = `<summary>
+  row.innerHTML = `<summary tabindex="-1">
+    <button class="caret" type="button" data-action="toggle-open" title="toggle details">›</button>
     <div class="meta">
       <span class="pill" data-field="permission"></span>
       <span data-field="app"></span>
@@ -93,22 +94,15 @@ function createRow(resource) {
     <div class="rules" data-field="rules"></div>
     <div class="row-actions">
       <span class="spinner" data-field="spinner">saving...</span>
-      <div class="action-row action-row-allow">
-        <button type="button" data-action="allow-all"></button>
-        <button type="button" data-action="allow-value"></button>
-        <button type="button" data-action="allow-custom">custom</button>
+      <div class="permission-action action-row-allow">
+        <span class="permission-action-label">allow</span>
+        <div class="segments" data-field="allow-segments"></div>
       </div>
-      <div class="action-row action-row-deny">
-        <button type="button" data-action="deny-all"></button>
-        <button type="button" data-action="deny-value"></button>
+      <div class="permission-action action-row-deny">
+        <span class="permission-action-label">deny</span>
+        <div class="segments" data-field="deny-segments"></div>
       </div>
     </div>
-    <form class="custom-rule">
-      <input data-field="custom" name="pattern">
-      <button type="submit" data-action="allow-custom-submit">allow glob</button>
-      <button type="submit" data-action="deny-custom-submit">deny glob</button>
-      <button type="button" data-action="allow-custom-cancel">cancel</button>
-    </form>
   </summary>
   <pre></pre>`
   updateRow(row, resource)
@@ -132,19 +126,141 @@ function updateRow(row, resource) {
   row.querySelector('[data-field="lastSeen"]').textContent = `last ${formatTime(resource.lastSeen)}`
   row.querySelector('[data-field="value"]').textContent = resource.valueText
   row.querySelector('[data-field="rules"]').textContent = rulesText(resource)
-  setActionButton(row, "allow-all", `allow all ${permissionLabel(resource)}`, `Allow all ${permissionLabel(resource)} resources`)
-  setActionButton(row, "deny-all", `deny all ${permissionLabel(resource)}`, `Deny all ${permissionLabel(resource)} resources`)
-  setActionButton(row, "allow-value", `allow ${resource.valueText}`, `Allow ${permissionLabel(resource)} ${resource.valueText}`)
-  setActionButton(row, "deny-value", `deny ${resource.valueText}`, `Deny ${permissionLabel(resource)} ${resource.valueText}`)
-  setActionButton(row, "allow-custom", "custom", "Custom glob rule")
-  setActionButton(row, "allow-custom-submit", "allow glob", "Allow custom glob")
-  setActionButton(row, "deny-custom-submit", "deny glob", "Deny custom glob")
-  setActionButton(row, "allow-custom-cancel", "cancel", "Cancel custom glob")
-  const custom = row.querySelector('[data-field="custom"]')
-  if (!custom.value) custom.value = resource.ruleValue
-  custom.title = resource.valueText
+  renderPermissionControls(row, resource)
+  setActionButton(row, "toggle-open", row.open ? "⌄" : "›", row.open ? "Hide details" : "Show details")
   setControlsDisabled(row, busy.has(resource.id))
   if (row.open) row.querySelector("pre").textContent = JSON.stringify(resource, null, 2)
+}
+
+function renderPermissionControls(row, resource) {
+  const patterns = segmentPatterns(resource)
+  row.querySelector('[data-field="allow-segments"]').replaceChildren(...patterns.map((item) => segmentControl(item, resource, "allow")))
+  row.querySelector('[data-field="deny-segments"]').replaceChildren(...patterns.map((item) => segmentControl(item, resource, "deny")))
+}
+
+function segmentControl(item, resource, action) {
+  const segment = document.createElement("span")
+  segment.className = item.trailing ? "segment segment-trailing" : item.empty ? "segment segment-empty" : "segment"
+  segment.title = item.title
+  segment.innerHTML = `${item.separator ? `<span class="segment-separator">${escapeHtml(item.separator)}</span>` : ""}
+    <span class="segment-stack">
+      <button class="segment-choice segment-star" type="button" data-action="segment-rule"></button>
+      <button class="segment-choice segment-exact" type="button" data-action="segment-rule"></button>
+    </span>`
+  const star = segment.querySelector(".segment-star")
+  const exact = segment.querySelector(".segment-exact")
+  star.dataset.policyAction = action
+  star.dataset.pattern = item.star
+  star.textContent = "*"
+  star.title = `${action} ${permissionLabel(resource)} ${item.star}`
+  exact.dataset.policyAction = action
+  exact.dataset.pattern = item.trailing ? item.star : item.exact
+  exact.textContent = item.label
+  exact.title = `${action} ${permissionLabel(resource)} ${item.trailing ? item.star : item.exact}`
+  if (item.trailing) {
+    star.remove()
+    exact.textContent = "*"
+  }
+  return segment
+}
+
+function segmentPatterns(resource) {
+  const value = resource.ruleValue
+  if (resource.valueKind !== "string" || !value) {
+    return [{
+      empty: false,
+      exact: value,
+      label: resource.valueText,
+      separator: "",
+      star: "*",
+      title: resource.valueText,
+    }]
+  }
+  if (resource.permission === "env") return envSegmentPatterns(value)
+  if (value.includes("/")) return pathSegmentPatterns(value)
+  return wordSegmentPatterns(value)
+}
+
+function envSegmentPatterns(value) {
+  const parts = value.split("_").filter(Boolean)
+  if (!parts.length) return wordSegmentPatterns(value)
+  return [...parts.map((part, index) => ({
+    empty: false,
+    exact: parts.slice(0, index + 1).join("_"),
+    label: part,
+    separator: index === 0 ? "" : "_",
+    star: [...parts.slice(0, index), "*"].join("_"),
+    title: parts.slice(0, index + 1).join("_"),
+  })), {
+    empty: true,
+    exact: value,
+    label: "*",
+    separator: "_",
+    star: `${value}_*`,
+    title: `${value}_*`,
+    trailing: true,
+  }]
+}
+
+function pathSegmentPatterns(value) {
+  const absolute = value.startsWith("/")
+  const suffixSlash = value.endsWith("/") && value.length > 1
+  const parts = value.split("/").filter(Boolean)
+  if (!parts.length) {
+    return [{
+      empty: true,
+      exact: absolute ? "/" : value,
+      label: "*",
+      separator: absolute ? "/" : "",
+      star: absolute ? "/*" : "*",
+      title: absolute ? "/*" : "*",
+      trailing: true,
+    }]
+  }
+  const prefix = absolute ? "/" : ""
+  return [...parts.map((part, index) => ({
+    empty: false,
+    exact: `${prefix}${parts.slice(0, index + 1).join("/")}${suffixSlash && index === parts.length - 1 ? "/" : ""}`,
+    label: part,
+    separator: absolute || index > 0 ? "/" : "",
+    star: `${prefix}${[...parts.slice(0, index), "*"].join("/")}`,
+    title: `${prefix}${parts.slice(0, index + 1).join("/")}`,
+  })), {
+    empty: true,
+    exact: value,
+    label: "*",
+    separator: "/",
+    star: `${value.replace(/\/$/, "")}/*`,
+    title: `${value.replace(/\/$/, "")}/*`,
+    trailing: true,
+  }]
+}
+
+function wordSegmentPatterns(value) {
+  return [{
+    empty: false,
+    exact: value,
+    label: value,
+    separator: "",
+    star: "*",
+    title: value,
+  }, {
+    empty: true,
+    exact: value,
+    label: "*",
+    separator: "",
+    star: `${value}*`,
+    title: `${value}*`,
+    trailing: true,
+  }]
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
 }
 
 function setActionButton(row, action, text, title) {
@@ -329,38 +445,26 @@ function setPolicyButtonsDisabled(disabled) {
 sort.addEventListener("change", renderOrder)
 
 resources.addEventListener("click", (event) => {
-  if (event.target.closest(".custom-rule")) event.stopPropagation()
+  const summary = event.target.closest(".resource > summary")
+  if (summary) event.preventDefault()
   const button = event.target.closest("button")
   const action = button?.dataset.action
   if (!action) return
-  if (action === "allow-custom-submit" || action === "deny-custom-submit") return
   event.preventDefault()
   event.stopPropagation()
   const row = event.target.closest(".resource")
   const entry = state.get(row?.dataset.id)
   if (!entry) return
+  if (action === "toggle-open") {
+    row.open = !row.open
+    setActionButton(row, "toggle-open", row.open ? "⌄" : "›", row.open ? "Hide details" : "Show details")
+    if (row.open) row.querySelector("pre").textContent = JSON.stringify(entry.resource, null, 2)
+    return
+  }
   if (row.dataset.busy === "true") return
-  if (action === "allow-all") addRule(row, entry.resource, "*", "allow")
-  if (action === "deny-all") addRule(row, entry.resource, "*", "deny")
-  if (action === "allow-value") addRule(row, entry.resource, entry.resource.ruleValue, "allow", entry.resource.valueKind)
-  if (action === "deny-value") addRule(row, entry.resource, entry.resource.ruleValue, "deny", entry.resource.valueKind)
-  if (action === "allow-custom") {
-    row.dataset.custom = "true"
-    row.querySelector('[data-field="custom"]').focus()
+  if (action === "segment-rule") {
+    addRule(row, entry.resource, button.dataset.pattern, button.dataset.policyAction, entry.resource.valueKind)
   }
-  if (action === "allow-custom-cancel") {
-    row.dataset.custom = "false"
-  }
-})
-
-resources.addEventListener("submit", (event) => {
-  if (!event.target.matches(".custom-rule")) return
-  event.preventDefault()
-  const row = event.target.closest(".resource")
-  const entry = state.get(row?.dataset.id)
-  const pattern = event.target.elements.pattern.value.trim()
-  if (!entry || !pattern || row.dataset.busy === "true") return
-  addRule(row, entry.resource, pattern, event.submitter?.dataset.action === "deny-custom-submit" ? "deny" : "allow", entry.resource.valueKind)
 })
 
 async function addRule(row, resource, pattern, action, valueKind) {

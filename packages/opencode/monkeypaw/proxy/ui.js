@@ -139,11 +139,15 @@ const html = `<!doctype html>
         background: var(--card);
         max-width: 100%;
         min-width: 0;
-        overflow: hidden;
         padding: 16px;
       }
 
+      .empty {
+        overflow: hidden;
+      }
+
       .resource {
+        overflow: visible;
         position: relative;
       }
 
@@ -151,6 +155,7 @@ const html = `<!doctype html>
       .resource:focus-within {
         background: var(--card-elevated);
         border-color: var(--line-strong);
+        z-index: 10;
       }
 
       .meta {
@@ -281,84 +286,136 @@ const html = `<!doctype html>
       .row-actions {
         display: none;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
         position: absolute;
         right: 12px;
         top: 12px;
-        z-index: 2;
-        max-width: calc(100% - 24px);
-        overflow: hidden;
+        z-index: 20;
+        max-width: calc(100vw - 32px);
+        min-width: min(720px, calc(100vw - 32px));
+        overflow: visible;
         padding: 8px;
+        width: max-content;
         border: 1px solid var(--line);
         border-radius: 8px;
         background: #050505;
       }
 
-      .action-row {
+      .caret {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        z-index: 21;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border-radius: 8px;
+        background: #050505;
+        line-height: 1;
+        opacity: 0.55;
+      }
+
+      .permission-action {
+        align-items: center;
         display: flex;
-        gap: 8px;
+        gap: 10px;
         min-width: 0;
         width: 100%;
       }
 
-      .row-actions button {
-        border-radius: 8px;
-        flex: 1 1 0;
+      .permission-action-label {
+        color: var(--muted);
+        flex: 0 0 38px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .segments {
+        display: flex;
+        flex: 1 1 auto;
+        gap: 3px;
         min-width: 0;
-        max-width: 180px;
+        overflow-x: auto;
+        overflow-y: visible;
+        padding-top: 26px;
+      }
+
+      .segment {
+        align-items: flex-end;
+        display: inline-flex;
+        flex: 0 0 auto;
+        max-width: 140px;
+        min-width: 28px;
+      }
+
+      .segment-separator {
+        color: var(--muted);
+        flex: 0 0 auto;
+        padding: 0 3px 5px 0;
+      }
+
+      .segment-stack {
+        display: inline-block;
+        max-width: 140px;
+        min-width: 28px;
+        position: relative;
+      }
+
+      .segment-choice {
+        border-radius: 8px;
+        box-sizing: border-box;
+        height: 26px;
+        max-width: 140px;
+        min-width: 28px;
         overflow: hidden;
+        padding: 0 9px;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .action-row-allow button {
+      .segment-star {
+        display: none;
+        left: 0;
+        position: absolute;
+        right: 0;
+        top: -26px;
+        width: 100%;
+        z-index: 4;
+      }
+
+      .segment:hover .segment-star,
+      .segment:focus-within .segment-star {
+        display: inline-block;
+      }
+
+      .segment-empty .segment-exact {
+        color: var(--muted);
+      }
+
+      .segment-trailing .segment-exact {
+        color: var(--muted);
+      }
+
+      .action-row-allow .segment-choice {
         border-color: #14532d;
         color: #86efac;
       }
 
-      .action-row-deny button {
+      .action-row-deny .segment-choice {
         border-color: #7f1d1d;
         color: #fca5a5;
       }
 
-      .action-row-allow button:hover {
+      .action-row-allow .segment-choice:hover {
         border-color: #22c55e;
       }
 
-      .action-row-deny button:hover {
+      .action-row-deny .segment-choice:hover {
         border-color: #ef4444;
-      }
-
-      .custom-rule {
-        display: none;
-        gap: 8px;
-        position: absolute;
-        left: 12px;
-        right: 12px;
-        top: 56px;
-        z-index: 3;
-        padding: 8px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: #050505;
-      }
-
-      .resource[data-custom="true"] .custom-rule {
-        display: flex;
-      }
-
-      .custom-rule input {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .custom-rule button {
-        border-radius: 8px;
-        flex: 0 0 auto;
-        max-width: 140px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
 
       .spinner {
@@ -372,6 +429,12 @@ const html = `<!doctype html>
       .resource:hover .row-actions,
       .resource:focus-within .row-actions {
         display: flex;
+      }
+
+      .resource:hover .caret,
+      .resource:focus-within .caret,
+      .resource[open] .caret {
+        opacity: 1;
       }
 
       .rules {
@@ -394,7 +457,7 @@ const html = `<!doctype html>
       }
 
       summary {
-        cursor: pointer;
+        cursor: default;
         list-style: none;
       }
 

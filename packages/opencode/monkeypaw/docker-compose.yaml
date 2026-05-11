@@ -126,10 +126,11 @@ services:
     extends:
       file: compose.security.yaml
       service: secured
-    # Bind-mounted stacks should be owned by the host user and run with matching
-    # numeric IDs, e.g. HOST_UID="$(id -u)" HOST_GID="$(id -g)".
-    # Without host mounts, the image-owned fallback runs as the built-in user.
-    user: "${HOST_UID:-opencode}:${HOST_GID:-opencode}"
+    # Git worktrees write objects into the original repo's common .git/objects
+    # directory, so the container user must match the host owner of /stacks.
+    # Defaults match macOS' first local user; override on Linux with:
+    # HOST_UID="$(id -u)" HOST_GID="$(id -g)".
+    user: "${HOST_UID:-501}:${HOST_GID:-20}"
     networks:
       - isolated
     healthcheck:

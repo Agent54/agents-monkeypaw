@@ -43,4 +43,5 @@ exec "$@" \
   --socket-addr externalHttp=unix:/sockets/external/debug-http.sock \
   --socket-addr httpProxy=0.0.0.0:8080 \
   --socket-addr httpsProxy=0.0.0.0:8443 \
-  --socket-addr agentHttp=0.0.0.0:4097
+  --socket-addr permissionUi=0.0.0.0:4097 \
+  --socket-addr agentHttp=0.0.0.0:4098

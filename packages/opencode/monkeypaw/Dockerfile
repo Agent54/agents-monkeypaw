@@ -139,9 +139,17 @@ USER opencode
 
 RUN set -euo pipefail; \
     node_pty_package="@lydell/node-pty-linux-x64"; \
-    if [ "$(uname -m)" = "aarch64" ]; then node_pty_package="@lydell/node-pty-linux-arm64"; fi; \
+    parcel_watcher_package="@parcel/watcher-linux-x64-glibc"; \
+    if [ "$(uname -m)" = "aarch64" ]; then \
+      node_pty_package="@lydell/node-pty-linux-arm64"; \
+      parcel_watcher_package="@parcel/watcher-linux-arm64-glibc"; \
+    fi; \
     cd /home/opencode/app/dist/deno/src \
-    && deno cache --quiet --config ../../../deno.jsonc "npm:${node_pty_package}@1.2.0-beta.10" ./index-deno.js
+    && deno cache --quiet --config ../../../deno.jsonc \
+      "npm:${node_pty_package}@1.2.0-beta.10" \
+      "npm:@parcel/watcher@2.5.1" \
+      "npm:${parcel_watcher_package}@2.5.1" \
+      ./index-deno.js
 
 USER root
 

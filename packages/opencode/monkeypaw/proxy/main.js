@@ -16,10 +16,15 @@ function log(event, value) {
   console.log(`[proxy] ${event}`, value)
 }
 
-function publishUiEvent(env, type, event) {
-  publishEvent(env, type, event).catch((error) => {
+function publishUiEvent(env, type, event, ctx) {
+  const promise = publishEvent(env, type, event).catch((error) => {
     log("ui event publish failed", error?.stack ?? String(error))
   })
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(promise)
+    return
+  }
+  return promise
 }
 
 function clip(value, max = 240) {
@@ -132,10 +137,15 @@ async function handlePermissionBrokerSession(socket, env) {
       }
 
       request.app = request.app ?? app
-      const response = await decidePermission(env, request).catch((error) => {
-        log("permission decision failed", error?.stack ?? String(error))
-        return { id: request.id, result: "allow" }
-      })
+      const waiting = setTimeout(() => {
+        log(`permission-broker session=${sessionId} waiting id=${request.id ?? "-"} app=${request.app} permission=${request.permission ?? "-"} value=${clip(String(request.value ?? "-"))}`)
+      }, 5000)
+      const response = await decidePermission(env, request)
+        .catch((error) => {
+          log("permission decision failed", error?.stack ?? String(error))
+          return { id: request.id, result: "allow" }
+        })
+        .finally(() => clearTimeout(waiting))
 
       try {
         await writeLine(writer, response)
@@ -187,9 +197,20 @@ function headerValue(headers, name) {
 function logHttpExchange(kind, request, response, startedAt, extra = {}) {
   const url = new URL(request.url)
   const duration = Date.now() - startedAt
+  const details = {
+    bytes: headerValue(response.headers, "content-length"),
+    contentType: headerValue(response.headers, "content-type"),
+    duration,
+    method: request.method,
+    status: response.status,
+    statusText: response.statusText || "-",
+    url: url.href,
+    ...extra,
+  }
   console.log(
-    `[${kind}] ${request.method} ${url.href} -> ${response.status} ${response.statusText || "-"} bytes=${headerValue(response.headers, "content-length")} type=${headerValue(response.headers, "content-type")} dur=${duration}ms extra=${compactJson(extra)}`,
+    `[${kind}] ${details.method} ${details.url} -> ${details.status} ${details.statusText} bytes=${details.bytes} type=${details.contentType} dur=${duration}ms extra=${compactJson(extra)}`,
   )
+  return details
 }
 
 function logProxyEvent(kind, message, startedAt, extra = {}) {
@@ -344,6 +365,7 @@ async function handleConnectTunnel(socket, request, reader, rest, startedAt, env
   } catch (error) {
     logHttpFailure("egress-proxy", `CONNECT ${request.target}`, startedAt, error)
     publishUiEvent(env, "proxy", recordProxyEvent({
+      direction: "egress",
       duration: Date.now() - startedAt,
       error: clip(error?.message ?? String(error)),
       method: "CONNECT",
@@ -369,6 +391,7 @@ async function handleConnectTunnel(socket, request, reader, rest, startedAt, env
 
   logProxyEvent("egress-proxy", `CONNECT ${request.target} -> 200 tunnel`, startedAt)
   publishUiEvent(env, "proxy", recordProxyEvent({
+    direction: "egress",
     duration: Date.now() - startedAt,
     method: "CONNECT",
     status: 200,
@@ -420,6 +443,7 @@ async function handleForwardProxy(socket, request, reader, rest, startedAt, env)
   publishUiEvent(env, "proxy", recordProxyEvent({
     bytes: headerValue(upstream.headers, "content-length"),
     contentType: headerValue(upstream.headers, "content-type"),
+    direction: "egress",
     duration: Date.now() - startedAt,
     method: request.method,
     status: upstream.status,
@@ -538,10 +562,8 @@ export const debugHttp = {
 }
 
 export const proxy = {
-  async fetch(request, env) {
-    const ui = servePermissionUi(request, env)
-    if (ui) return ui
-    return agent.fetch(request)
+  async fetch(request, env, ctx) {
+    return agent.fetch(request, env, ctx)
   },
 
   async connect(socket, env) {
@@ -549,8 +571,16 @@ export const proxy = {
   },
 }
 
+export const permissionUi = {
+  async fetch(request, env) {
+    const ui = servePermissionUi(request, env)
+    if (ui) return ui
+    return new Response("permission UI is available under /permissions\n", { status: 404 })
+  },
+}
+
 export const agent = {
-  async fetch(request) {
+  async fetch(request, env, ctx) {
     const startedAt = Date.now()
     const url = new URL(request.url)
     const upstreamUrl = new URL(url.pathname + url.search, "http://agent:4097")
@@ -558,7 +588,9 @@ export const agent = {
     try {
       if (isWebSocketUpgrade(request)) {
         const response = await fetch(new Request(upstreamUrl, request))
-        logHttpExchange("ingress-proxy", request, response, startedAt, { upgrade: "websocket" })
+        publishUiEvent(env, "proxy", recordProxyEvent({
+          ...logHttpExchange("ingress-proxy", request, response, startedAt, { direction: "ingress", upgrade: "websocket" }),
+        }), ctx)
         return response
       }
 
@@ -571,10 +603,21 @@ export const agent = {
         body,
         redirect: "manual",
       })
-      logHttpExchange("ingress-proxy", request, response, startedAt)
+      publishUiEvent(env, "proxy", recordProxyEvent({
+        ...logHttpExchange("ingress-proxy", request, response, startedAt, { direction: "ingress" }),
+      }), ctx)
       return response
     } catch (error) {
       logHttpFailure("ingress-proxy", `${request.method} ${request.url}`, startedAt, error)
+      publishUiEvent(env, "proxy", recordProxyEvent({
+        direction: "ingress",
+        duration: Date.now() - startedAt,
+        error: clip(error?.message ?? String(error)),
+        method: request.method,
+        status: 502,
+        statusText: "Proxy Error",
+        url: request.url,
+      }), ctx)
       throw error
     }
   },

@@ -43,7 +43,12 @@ const config :Workerd.Config = (
     (
       name = "agentHttp",
       http = (),
-      service = (name = "proxy", entrypoint = "proxy"),
+      service = (name = "proxy", entrypoint = "agent"),
+    ),
+    (
+      name = "permissionUi",
+      http = (),
+      service = (name = "proxy", entrypoint = "permissionUi"),
     ),
   ],
 );

@@ -26,4 +26,6 @@ WORKDIR /app
 COPY packages/opencode/monkeypaw/proxy/main.capnp packages/opencode/monkeypaw/proxy/main.js packages/opencode/monkeypaw/proxy/ui.js packages/opencode/monkeypaw/proxy/client.js /app/
 COPY --chmod=755 packages/opencode/monkeypaw/proxy/entrypoint.sh /usr/local/bin/proxy-entrypoint.sh
 
+EXPOSE 8080 8443 4097 4098
+
 CMD ["/usr/local/bin/proxy-entrypoint.sh"]

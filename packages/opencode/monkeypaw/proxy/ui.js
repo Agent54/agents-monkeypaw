@@ -3,6 +3,7 @@ import clientScript from "./client.js"
 
 const encoder = new TextEncoder()
 const maxClients = 4
+const pendingPermissionTtl = 10 * 60 * 1000
 const streamTtl = 5 * 60 * 1000
 let nextProxyRequestId = 1
 
@@ -72,7 +73,7 @@ const html = `<!doctype html>
 
       #status {
         border: 1px solid var(--line);
-        border-radius: 21px;
+        border-radius: 8px;
         background: var(--card);
         color: var(--muted);
         padding: 8px 12px;
@@ -88,7 +89,7 @@ const html = `<!doctype html>
       button,
       select {
         border: 1px solid var(--line);
-        border-radius: 999px;
+        border-radius: 8px;
         background: var(--card);
         color: var(--ink);
         cursor: pointer;
@@ -108,7 +109,7 @@ const html = `<!doctype html>
 
       input {
         border: 1px solid var(--line);
-        border-radius: 21px;
+        border-radius: 8px;
         background: var(--bg);
         color: var(--ink);
         font: inherit;
@@ -134,7 +135,7 @@ const html = `<!doctype html>
       .empty,
       .resource {
         border: 1px solid var(--line);
-        border-radius: 14px;
+        border-radius: 8px;
         background: var(--card);
         max-width: 100%;
         min-width: 0;
@@ -224,6 +225,7 @@ const html = `<!doctype html>
         color: #f472b6;
       }
 
+      .resource[data-permission="proxy connect"] .pill,
       .resource[data-proxy-method="connect"] .pill {
         color: #f472b6;
       }
@@ -232,6 +234,7 @@ const html = `<!doctype html>
         color: #60a5fa;
       }
 
+      .resource[data-permission="proxy get"] .pill,
       .resource[data-proxy-method="get"] .pill {
         color: #60a5fa;
       }
@@ -240,6 +243,7 @@ const html = `<!doctype html>
         color: #c084fc;
       }
 
+      .resource[data-permission="proxy post"] .pill,
       .resource[data-proxy-method="post"] .pill {
         color: #c084fc;
       }
@@ -248,6 +252,7 @@ const html = `<!doctype html>
         color: #facc15;
       }
 
+      .resource[data-permission^="proxy "]:not([data-permission="proxy connect"]):not([data-permission="proxy get"]):not([data-permission="proxy post"]) .pill,
       .resource[data-permission="net"][data-proxy-method]:not([data-proxy-method=""]):not([data-proxy-method="connect"]):not([data-proxy-method="get"]):not([data-proxy-method="post"]) .pill {
         color: #facc15;
       }
@@ -259,7 +264,7 @@ const html = `<!doctype html>
       .pending-alert {
         align-items: center;
         border: 1px solid #7f1d1d;
-        border-radius: 999px;
+        border-radius: 5px;
         color: #f87171;
         display: inline-flex;
         font-weight: 700;
@@ -275,17 +280,53 @@ const html = `<!doctype html>
 
       .row-actions {
         display: none;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: 8px;
         position: absolute;
         right: 12px;
         top: 12px;
         z-index: 2;
-        max-width: min(520px, calc(100% - 24px));
+        max-width: calc(100% - 24px);
+        overflow: hidden;
         padding: 8px;
         border: 1px solid var(--line);
-        border-radius: 21px;
+        border-radius: 8px;
         background: #050505;
+      }
+
+      .action-row {
+        display: flex;
+        gap: 8px;
+        min-width: 0;
+        width: 100%;
+      }
+
+      .row-actions button {
+        border-radius: 8px;
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .action-row-allow button {
+        border-color: #14532d;
+        color: #86efac;
+      }
+
+      .action-row-deny button {
+        border-color: #7f1d1d;
+        color: #fca5a5;
+      }
+
+      .action-row-allow button:hover {
+        border-color: #22c55e;
+      }
+
+      .action-row-deny button:hover {
+        border-color: #ef4444;
       }
 
       .custom-rule {
@@ -298,7 +339,7 @@ const html = `<!doctype html>
         z-index: 3;
         padding: 8px;
         border: 1px solid var(--line);
-        border-radius: 21px;
+        border-radius: 8px;
         background: #050505;
       }
 
@@ -309,6 +350,15 @@ const html = `<!doctype html>
       .custom-rule input {
         flex: 1;
         min-width: 0;
+      }
+
+      .custom-rule button {
+        border-radius: 8px;
+        flex: 0 0 auto;
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .spinner {
@@ -374,6 +424,8 @@ const html = `<!doctype html>
               <option value="count">count</option>
             </select>
           </label>
+          <button id="save-policies" type="button">save</button>
+          <button id="load-policies" type="button">load</button>
           <button id="clear" type="button">clear</button>
           <div id="status">connecting</div>
         </div>
@@ -396,6 +448,12 @@ function headers(contentType) {
   }
 }
 
+function clip(value, max = 240) {
+  const text = String(value)
+  if (text.length <= max) return text
+  return `${text.slice(0, max - 1)}…`
+}
+
 function permissionEvent(request) {
   return {
     app: request.app ?? "monkeypaw",
@@ -405,7 +463,7 @@ function permissionEvent(request) {
     permission: request.permission,
     receivedAt: new Date().toISOString(),
     request,
-    summary: permissionSummary(request),
+    summary: permissionDisplayValue(request),
   }
 }
 
@@ -433,7 +491,7 @@ function permissionResourceId(app, request) {
 
 function permissionResource(request, existing) {
   const app = request.app ?? "monkeypaw"
-  const valueText = permissionSummary(request)
+  const valueText = permissionDisplayValue(request)
   const seenAt = request.datetime ?? new Date().toISOString()
   const countIncrement = request.countIncrement ?? 1
   return {
@@ -447,8 +505,10 @@ function permissionResource(request, existing) {
     pending: request.pending ?? false,
     permission: request.permission ?? "permission",
     rule: request.rule,
+    ruleValue: permissionRuleValue(request),
     rules: request.rules ?? [],
     value: request.value,
+    valueKind: permissionValueKind(request.value),
     valueText,
   }
 }
@@ -457,29 +517,79 @@ function permissionResponse(request) {
   if (request.permission === "run" && request.value === null) {
     return { id: request.id, result: "deny" }
   }
-  return { id: request.id, result: "allow" }
+  return { id: request.id, result: request.rule?.action === "deny" ? "deny" : "allow" }
 }
 
 function globMatch(pattern, value) {
-  const regex = new RegExp(`^${String(pattern).replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`)
+  const source = String(pattern)
+  if (source.endsWith("/*")) {
+    const regex = new RegExp(`^${globRegexSource(source.slice(0, -2))}(?:/.*)?$`)
+    return regex.test(String(value))
+  }
+  const regex = new RegExp(`^${globRegexSource(source)}$`)
   return regex.test(String(value))
+}
+
+function globRegexSource(pattern) {
+  return String(pattern).replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")
 }
 
 function matchingRule(rules, request) {
   const app = request.app ?? "monkeypaw"
   const permission = request.permission ?? "permission"
-  const value = permissionSummary(request)
+  const value = permissionRuleValue(request)
+  const valueKind = permissionValueKind(request.value)
   return rules.find((rule) =>
     (rule.app === "*" || rule.app === app) &&
     (rule.permission === "*" || rule.permission === permission) &&
+    (!rule.valueKind || rule.valueKind === valueKind) &&
     globMatch(rule.pattern, value)
   )
 }
 
-function permissionSummary(request) {
+function normalizeRules(input, nextRuleId) {
+  const source = Array.isArray(input) ? input : input?.rules
+  if (!Array.isArray(source)) return { nextRuleId, rules: [] }
+  const rules = source
+    .map((rule, index) => ({
+      action: rule.action === "deny" ? "deny" : "allow",
+      app: typeof rule.app === "string" && rule.app ? rule.app : "monkeypaw",
+      createdAt: typeof rule.createdAt === "string" ? rule.createdAt : new Date().toISOString(),
+      id: Number.isFinite(Number(rule.id)) ? Number(rule.id) : nextRuleId + index,
+      pattern: typeof rule.pattern === "string" ? rule.pattern : "*",
+      permission: typeof rule.permission === "string" && rule.permission ? rule.permission : "*",
+      valueKind: typeof rule.valueKind === "string" ? rule.valueKind : undefined,
+    }))
+  return {
+    nextRuleId: Math.max(nextRuleId, ...rules.map((rule) => rule.id + 1), nextRuleId),
+    rules,
+  }
+}
+
+function rulePattern(input, inferred) {
+  if (typeof input.pattern !== "string") return "*"
+  if (input.pattern !== "") return input.pattern
+  if (input.valueKind === "null" || input.valueKind === "undefined") return ""
+  return inferred?.value
+}
+
+function permissionValueKind(value) {
+  if (value === null) return "null"
+  if (value === undefined) return "undefined"
+  if (typeof value === "string") return "string"
+  return "json"
+}
+
+function permissionDisplayValue(request) {
   if (typeof request.value === "string") return request.value
-  if (request.value === null) return "-"
-  if (request.value === undefined) return "-"
+  if (request.value === null) return "(null)"
+  if (request.value === undefined) return "(missing)"
+  return JSON.stringify(request.value, null, 2)
+}
+
+function permissionRuleValue(request) {
+  if (typeof request.value === "string") return request.value
+  if (request.value === null || request.value === undefined) return ""
   return JSON.stringify(request.value, null, 2)
 }
 
@@ -489,12 +599,13 @@ export function recordPermissionRequest(request) {
 
 export function recordProxyEvent(details) {
   const value = details.url ?? details.target ?? "-"
+  const method = String(details.method ?? "proxy").toLowerCase()
   return {
     app: "monkeypaw",
     datetime: new Date().toISOString(),
     id: details.id ?? nextProxyRequestId++,
     pid: 0,
-    permission: "net",
+    permission: method === "connect" ? "proxy connect" : `proxy ${method}`,
     proxy: details,
     v: 1,
     value,
@@ -527,6 +638,10 @@ export function servePermissionUi(request, env) {
   if (request.method === "POST" && url.pathname === "/permissions/rules") {
     if (!env?.EVENT_BUS) return new Response("event bus binding missing\n", { status: 500 })
     return eventBus(env).fetch("http://event-bus/rules", request)
+  }
+  if (url.pathname === "/permissions/policies" && ["GET", "POST", "PUT"].includes(request.method)) {
+    if (!env?.EVENT_BUS) return new Response("event bus binding missing\n", { status: 500 })
+    return eventBus(env).fetch("http://event-bus/policies", request)
   }
   if (request.method !== "GET") return
   if (url.pathname === "/permissions" || url.pathname === "/permissions/") {
@@ -565,20 +680,33 @@ export class EventBus extends DurableObject {
       return new Response(null, { status: 204 })
     }
     if (request.method === "POST" && url.pathname === "/rules") return this.addRule(await request.json())
+    if (url.pathname === "/policies" && request.method === "GET") return this.getPolicies()
+    if (url.pathname === "/policies" && ["POST", "PUT"].includes(request.method)) return this.setPolicies(await request.json())
     if (request.method === "GET" && url.pathname === "/events") return this.eventStream(request)
     return new Response("not found", { status: 404 })
   }
 
+  pendingCount() {
+    return [...this.pending.values()].reduce((total, pending) => total + pending.length, 0)
+  }
+
   addRule(input) {
+    const inferred = this.inferRuleValue(input)
+    const pattern = rulePattern(input, inferred)
+    if (pattern === undefined) {
+      return new Response("empty rule pattern does not match a pending resource\n", { status: 400 })
+    }
     const rule = {
-      action: "allow",
+      action: input.action === "deny" ? "deny" : "allow",
       app: input.app ?? "monkeypaw",
       createdAt: new Date().toISOString(),
       id: this.nextRuleId++,
-      pattern: input.pattern ?? "*",
+      pattern,
       permission: input.permission ?? "*",
+      valueKind: typeof input.valueKind === "string" ? input.valueKind : inferred?.valueKind,
     }
     this.rules.push(rule)
+    console.log(`[permissions] rule added action=${rule.action} permission=${rule.permission} pattern=${rule.pattern} pending=${this.pendingCount()}`)
     this.resolvePending(rule)
     this.resources.forEach((resource) => {
       if (!this.ruleAppliesToResource(rule, resource)) return
@@ -588,6 +716,57 @@ export class EventBus extends DurableObject {
       this.broadcast("resource", resource)
     })
     return Response.json({ rule, rules: this.rules })
+  }
+
+  inferRuleValue(input) {
+    if (input.pattern !== "" || input.valueKind === "null" || input.valueKind === "undefined") return
+    if ("value" in input && input.value !== null && input.value !== undefined) {
+      return {
+        value: permissionRuleValue(input),
+        valueKind: permissionValueKind(input.value),
+      }
+    }
+    const app = input.app ?? "monkeypaw"
+    const permission = input.permission ?? "*"
+    const matches = [...this.pending.values()]
+      .flatMap((pending) => pending)
+      .map((pending) => pending.permission)
+      .filter((pending) =>
+        (app === "*" || (pending.app ?? "monkeypaw") === app) &&
+        (permission === "*" || (pending.permission ?? "permission") === permission)
+      )
+      .map((pending) => ({
+        key: `${permissionValueKind(pending.value)}\u0000${permissionRuleValue(pending)}`,
+        value: permissionRuleValue(pending),
+        valueKind: permissionValueKind(pending.value),
+      }))
+      .filter((pending) => pending.valueKind !== "null" && pending.valueKind !== "undefined")
+    const unique = new Map(matches.map((pending) => [pending.key, pending]))
+    if (unique.size !== 1) return
+    return [...unique.values()][0]
+  }
+
+  getPolicies() {
+    return Response.json({
+      exportedAt: new Date().toISOString(),
+      rules: this.rules,
+      v: 1,
+    })
+  }
+
+  setPolicies(input) {
+    const policy = normalizeRules(input, this.nextRuleId)
+    this.rules = policy.rules
+    this.nextRuleId = policy.nextRuleId
+    console.log(`[permissions] policies loaded rules=${this.rules.length} pending=${this.pendingCount()}`)
+    this.rules.forEach((rule) => this.resolvePending(rule))
+    this.resources.forEach((resource) => {
+      resource.rule = matchingRule(this.rules, resource.lastRequest ?? resource)
+      resource.pending = resource.pending && !resource.rule
+      this.attachRules(resource)
+      this.broadcast("resource", resource)
+    })
+    return this.getPolicies()
   }
 
   ruleAppliesToResource(rule, resource) {
@@ -610,9 +789,30 @@ export class EventBus extends DurableObject {
 
     permission.pending = true
     const resource = this.upsertResource(permission)
+    console.log(`[permissions] pending id=${permission.id ?? "-"} app=${permission.app ?? "monkeypaw"} permission=${permission.permission ?? "permission"} value=${clip(permissionDisplayValue(permission))} pending=${this.pendingCount() + 1}`)
     return new Promise((resolve) => {
+      const item = {
+        permission,
+        resolve,
+        timeout: undefined,
+      }
+      item.timeout = setTimeout(() => {
+        const pending = this.pending.get(resource.id) ?? []
+        const remaining = pending.filter((current) => current !== item)
+        if (remaining.length) {
+          this.pending.set(resource.id, remaining)
+        } else {
+          this.pending.delete(resource.id)
+        }
+        permission.countIncrement = 0
+        permission.pending = false
+        permission.timedOut = true
+        this.upsertResource(permission)
+        console.log(`[permissions] pending timeout id=${permission.id ?? "-"} permission=${permission.permission ?? "permission"} value=${clip(permissionDisplayValue(permission))} pending=${this.pendingCount()}`)
+        resolve(Response.json({ id: permission.id, result: "deny" }))
+      }, pendingPermissionTtl)
       const pending = this.pending.get(resource.id) ?? []
-      pending.push({ permission, resolve })
+      pending.push(item)
       this.pending.set(resource.id, pending)
     })
   }
@@ -621,10 +821,12 @@ export class EventBus extends DurableObject {
     this.pending.forEach((pending, resourceId) => {
       const remaining = pending.filter((item) => {
         if (matchingRule([rule], item.permission) !== rule) return true
+        clearTimeout(item.timeout)
         item.permission.pending = false
         item.permission.countIncrement = 0
         item.permission.rule = rule
         this.upsertResource(item.permission)
+        console.log(`[permissions] pending resolved id=${item.permission.id ?? "-"} action=${rule.action} permission=${rule.permission} pattern=${rule.pattern}`)
         item.resolve(Response.json(permissionResponse(item.permission)))
         return false
       })

@@ -51,6 +51,7 @@ services:
       - "8080:8080"
       - "8443:8443"
       - "4097:4097"
+      - "4098:4098"
     volumes:
       - mitm-ca:/mitm-ca
       - proxy-internal:/sockets/internal
@@ -149,7 +150,9 @@ services:
       - /tmp:size=256M,nosuid,exec
       - /run:size=64M
 
-# OPENCODE_SERVER_PASSWORD="5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c" opencode attach http://localhost:4097
+# Permission UI: http://localhost:4097/permissions
+# Agent proxy: http://localhost:4098
+# OPENCODE_SERVER_PASSWORD="5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c" opencode attach http://localhost:4098
 
 volumes:
   mitm-ca:

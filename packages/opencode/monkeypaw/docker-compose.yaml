@@ -39,7 +39,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - test -S /sockets/internal/permission-broker.sock && test -s /mitm-ca/mitmproxy-ca-cert.pem && test -s /mitm-ca/workerd-proxy-cert.pem
+        - test -S /sockets/internal/permission-broker.sock && test -s /mitm-ca/mitmproxy-ca-cert.pem && test -s /mitm-ca/workerd-proxy-cert.pem && node -e "const net=require('node:net');const s=net.connect('/sockets/internal/permission-broker.sock');const t=setTimeout(()=>process.exit(1),1000);s.once('connect',()=>{clearTimeout(t);s.end();process.exit(0)});s.once('error',()=>process.exit(1))"
       interval: 1s
       timeout: 1s
       retries: 30
@@ -87,6 +87,7 @@ services:
       - mitm-ca:/mitm-ca:ro
   agent:
     image: opencode-monkeypaw-agent:local
+    restart: unless-stopped
     build:
       context: ../../..
       dockerfile: packages/opencode/monkeypaw/Dockerfile
@@ -134,7 +135,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -fsS -o /dev/null -u opencode:5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c http://localhost:4097/global/health",
+          "test -S /tmp/opencode-proxy/permission-broker.sock && socat -T 1 -u OPEN:/dev/null UNIX-CONNECT:/tmp/opencode-proxy/permission-broker.sock >/dev/null 2>&1 && curl -fsS -o /dev/null -u opencode:5a7ca64d097eb96aee23395fb7feda88c2d30ce627fbd66766ef306c http://localhost:4097/global/health",
         ]
       interval: 10s
       timeout: 5s

@@ -13,12 +13,17 @@ readonly launch_cwd="${OPENCODE_LAUNCH_CWD:-$app_root/dist/deno}"
 readonly mount_root="${OPENCODE_MOUNT_ROOT:-/stacks}"
 readonly audit_file="${DENO_AUDIT_PERMISSIONS:-/home/opencode/deno-permissions.audit.jsonl}"
 readonly broker_socket="${DENO_PERMISSION_BROKER_PATH:-/home/opencode/monkeypaw/permission-broker.sock}"
+readonly broker_socket_dir="$(dirname "$broker_socket")"
 readonly global_config_dir="${XDG_CONFIG_HOME:-/home/opencode/config}/opencode"
 readonly runtime_cwd="$(pwd -P)"
 export HOME="${HOME:-$mount_root}"
 export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-/home/opencode/config/opencode}"
 export OPENCODE_TEST_HOME="${OPENCODE_TEST_HOME:-$mount_root}"
-export OPENCODE_CONFIG_CONTENT="${OPENCODE_CONFIG_CONTENT:-{\"username\":\"opencode\"}}"
+if [ -z "${OPENCODE_CONFIG_CONTENT:-}" ]; then
+  export OPENCODE_CONFIG_CONTENT='{"username":"opencode"}'
+else
+  export OPENCODE_CONFIG_CONTENT
+fi
 export DENO_AUDIT_PERMISSIONS="${DENO_AUDIT_PERMISSIONS:-$audit_file}"
 export DENO_TRACE_PERMISSIONS="${DENO_TRACE_PERMISSIONS:-1}"
 export DENO_PERMISSION_BROKER_PATH="${DENO_PERMISSION_BROKER_PATH:-$broker_socket}"
@@ -48,6 +53,26 @@ require_socket() {
     return
   fi
   echo "[security] missing unix socket: $1" >&2
+  exit 1
+}
+
+broker_socket_accepts() {
+  socat -T 1 -u OPEN:/dev/null "UNIX-CONNECT:$broker_socket" >/dev/null 2>&1
+}
+
+wait_for_broker_socket() {
+  local deadline
+  deadline=$((SECONDS + ${BROKER_SOCKET_READY_TIMEOUT:-60}))
+
+  while [ "$SECONDS" -le "$deadline" ]; do
+    if [ -S "$broker_socket" ] && broker_socket_accepts; then
+      return
+    fi
+    sleep "${BROKER_SOCKET_READY_INTERVAL:-1}"
+  done
+
+  echo "[security] permission broker socket is not accepting connections: $broker_socket" >&2
+  ls -ldn "$broker_socket" "$(dirname "$broker_socket")" >&2 || true
   exit 1
 }
 
@@ -136,7 +161,9 @@ prepare_runtime() {
   require_writable_dir "$deno_dir"
   require_writable_dir "$temp_dir"
   touch "$audit_file"
+  require_dir "$broker_socket_dir"
   require_socket "$broker_socket"
+  wait_for_broker_socket
   require_dir "$global_config_dir"
   require_dir "$OPENCODE_CONFIG_DIR"
   require_dir "$app_root"
@@ -156,7 +183,7 @@ prepare_runtime() {
 apply_landlock() {
   local rx=()
   local ro=("$app_root")
-  local rw=("$mount_root" "$runtime_cwd" "$workspace_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir" "$audit_file" "$broker_socket")
+  local rw=("$mount_root" "$runtime_cwd" "$workspace_root" "$OPENCODE_CONFIG_DIR" "$global_config_dir" "$data_dir" "$state_dir" "$cache_dir" "$deno_dir" "$temp_dir" "$audit_file" "$broker_socket_dir")
 
   append_if_exists rx /usr
   append_if_exists rx /bin
@@ -199,8 +226,57 @@ apply_landlock() {
   exec /usr/local/bin/landlock-restrict "$@"
 }
 
+socket_identity() {
+  stat -c '%d:%i' "$broker_socket" 2>/dev/null || true
+}
+
+supervise_broker_socket() {
+  local child="$1"
+  local identity="$2"
+
+  while kill -0 "$child" 2>/dev/null; do
+    sleep "${BROKER_SOCKET_WATCH_INTERVAL:-1}"
+    if [ -S "$broker_socket" ] && [ "$(socket_identity)" = "$identity" ] && broker_socket_accepts; then
+      continue
+    fi
+    echo "[security] permission broker socket changed or stopped accepting; restarting agent" >&2
+    kill -TERM "$child" 2>/dev/null || true
+    sleep 2
+    kill -KILL "$child" 2>/dev/null || true
+    exit 42
+  done
+}
+
+run_supervised() {
+  wait_for_broker_socket
+
+  local identity
+  identity="$(socket_identity)"
+  if [ -z "$identity" ]; then
+    echo "[security] cannot identify permission broker socket: $broker_socket" >&2
+    exit 1
+  fi
+
+  "$@" &
+  local child=$!
+  supervise_broker_socket "$child" "$identity" &
+  local watcher=$!
+
+  set +e
+  wait "$child"
+  local status=$?
+  kill "$watcher" 2>/dev/null || true
+  wait "$watcher" 2>/dev/null || true
+  exit "$status"
+}
+
 echo "[security] OpenCode secure entrypoint starting"
 echo "[security] PID=$$ UID=$(id -u) GID=$(id -g)"
+
+if [ "${1:-}" = "--supervised" ]; then
+  shift
+  run_supervised "$@"
+fi
 
 apply_resource_limits
 prepare_proxy_environment
@@ -210,7 +286,7 @@ cd "$launch_cwd"
 
 if [ "${LANDLOCK_ENABLED:-true}" != "true" ]; then
   echo "[security] Landlock disabled via LANDLOCK_ENABLED=false"
-  exec "$@"
+  run_supervised "$@"
 fi
 
-apply_landlock "$@"
+apply_landlock /usr/local/bin/entrypoint.sh --supervised "$@"

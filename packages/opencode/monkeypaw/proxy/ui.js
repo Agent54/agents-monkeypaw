@@ -1,8 +1,10 @@
 import { DurableObject } from "cloudflare:workers"
+import clientScript from "./client.js"
 
 const encoder = new TextEncoder()
 const maxClients = 4
 const streamTtl = 5 * 60 * 1000
+let nextProxyRequestId = 1
 
 const html = `<!doctype html>
 <html lang="en">
@@ -81,7 +83,8 @@ const html = `<!doctype html>
         gap: 8px;
       }
 
-      button {
+      button,
+      select {
         border: 1px solid var(--line);
         border-radius: 999px;
         background: var(--card);
@@ -91,21 +94,29 @@ const html = `<!doctype html>
         padding: 8px 12px;
       }
 
-      button:hover {
+      button:hover,
+      select:hover {
         border-color: var(--muted);
+      }
+
+      label {
+        align-items: center;
+        color: var(--muted);
+        display: flex;
+        gap: 8px;
       }
 
       #status[data-connected="true"] {
         color: var(--accent);
       }
 
-      #log {
+      #resources {
         display: grid;
         gap: 12px;
       }
 
       .empty,
-      .event {
+      .resource {
         border: 1px solid var(--line);
         border-radius: 10px;
         background: var(--card);
@@ -113,10 +124,6 @@ const html = `<!doctype html>
         min-width: 0;
         overflow: hidden;
         padding: 16px;
-      }
-
-      .event {
-        animation: rise 180ms ease-out;
       }
 
       .meta {
@@ -132,10 +139,6 @@ const html = `<!doctype html>
         color: var(--warn);
       }
 
-      .event[data-kind="proxy"] .pill {
-        color: var(--accent);
-      }
-
       pre {
         display: none;
         border-top: 1px solid var(--line);
@@ -146,7 +149,7 @@ const html = `<!doctype html>
         white-space: pre;
       }
 
-      .event[open] pre {
+      .resource[open] pre {
         display: block;
       }
 
@@ -165,91 +168,32 @@ const html = `<!doctype html>
         white-space: pre;
       }
 
-      @keyframes rise {
-        from {
-          opacity: 0;
-          transform: translateY(8px);
-        }
-      }
     </style>
   </head>
   <body>
     <main>
       <header>
         <div class="actions">
+          <label>
+            sort
+            <select id="sort">
+              <option value="lastSeen">last used</option>
+              <option value="firstSeen">first used</option>
+              <option value="app">app</option>
+              <option value="permission">permission</option>
+              <option value="count">count</option>
+            </select>
+          </label>
           <button id="clear" type="button">clear</button>
           <div id="status">connecting</div>
         </div>
       </header>
-      <section id="log">
-        <article class="empty">Waiting for permission or proxy events...</article>
+      <section id="resources">
+        <article class="empty">Waiting for permission resources...</article>
       </section>
     </main>
   </body>
 </html>`
-
-const script = `const status = document.querySelector("#status")
-const log = document.querySelector("#log")
-const clear = document.querySelector("#clear")
-
-function render(event) {
-  document.querySelector(".empty")?.remove()
-  const item = document.createElement("details")
-  item.className = "event"
-  item.dataset.kind = event.kind ?? "event"
-  item.innerHTML = \`<summary>
-    <div class="meta">
-      <span class="pill">\${escapeHtml(eventLabel(event))}</span>
-    </div>
-    <div class="value">\${escapeHtml(event.summary)}</div>
-  </summary>
-  <pre>\${escapeHtml(JSON.stringify(event.details ?? event.request ?? event, null, 2))}</pre>\`
-  log.prepend(item)
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[character])
-}
-
-function eventLabel(event) {
-  if (event.kind === "permission") return event.permission ?? "permission"
-  return event.kind ?? "event"
-}
-
-function connect() {
-  const source = new EventSource("/permissions/events")
-
-  source.addEventListener("open", () => {
-    status.textContent = "connected"
-    status.dataset.connected = "true"
-  })
-  source.addEventListener("permission", (message) => render(JSON.parse(message.data)))
-  source.addEventListener("proxy", (message) => render(JSON.parse(message.data)))
-  source.addEventListener("error", () => {
-    status.textContent = "reconnecting"
-    status.dataset.connected = "false"
-  })
-}
-
-clear.addEventListener("click", () => {
-  log.replaceChildren(emptyState())
-})
-
-function emptyState() {
-  const item = document.createElement("article")
-  item.className = "empty"
-  item.textContent = "Waiting for permission or proxy events..."
-  return item
-}
-
-connect()
-`
 
 function sse(event, data) {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
@@ -264,6 +208,7 @@ function headers(contentType) {
 
 function permissionEvent(request) {
   return {
+    app: request.app ?? "monkeypaw",
     datetime: request.datetime,
     id: request.id,
     kind: "permission",
@@ -271,6 +216,46 @@ function permissionEvent(request) {
     receivedAt: new Date().toISOString(),
     request,
     summary: permissionSummary(request),
+  }
+}
+
+function resourceValueKey(value) {
+  if (value === undefined) return "-"
+  return JSON.stringify(stableResourceValue(value))
+}
+
+function stableResourceValue(value) {
+  if (Array.isArray(value)) return value.map(stableResourceValue)
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((result, key) => {
+        result[key] = stableResourceValue(value[key])
+        return result
+      }, {})
+  }
+  return value
+}
+
+function permissionResourceId(app, request) {
+  return JSON.stringify([app, request.permission ?? "permission", resourceValueKey(request.value)])
+}
+
+function permissionResource(request, existing) {
+  const app = request.app ?? "monkeypaw"
+  const valueText = permissionSummary(request)
+  const seenAt = request.datetime ?? new Date().toISOString()
+  return {
+    app,
+    count: (existing?.count ?? 0) + 1,
+    firstSeen: existing?.firstSeen ?? seenAt,
+    id: permissionResourceId(app, request),
+    kind: "resource",
+    lastRequest: request,
+    lastSeen: seenAt,
+    permission: request.permission ?? "permission",
+    value: request.value,
+    valueText,
   }
 }
 
@@ -292,19 +277,17 @@ export function recordPermissionRequest(request) {
   return permissionEvent(request)
 }
 
-function proxySummary(details) {
-  const status = details.status ? ` -> ${details.status}${details.statusText ? ` ${details.statusText}` : ""}` : ""
-  const duration = details.duration === undefined ? "" : ` (${details.duration}ms)`
-  return `${details.method} ${details.url ?? details.target}${status}${duration}`
-}
-
 export function recordProxyEvent(details) {
+  const value = details.url ?? details.target ?? "-"
   return {
-    details,
-    id: details.id,
-    kind: "proxy",
-    receivedAt: new Date().toISOString(),
-    summary: proxySummary(details),
+    app: "monkeypaw",
+    datetime: new Date().toISOString(),
+    id: details.id ?? nextProxyRequestId++,
+    pid: 0,
+    permission: "net",
+    proxy: details,
+    v: 1,
+    value,
   }
 }
 
@@ -336,7 +319,7 @@ export function servePermissionUi(request, env) {
     return new Response(html, { headers: headers("text/html; charset=utf-8") })
   }
   if (url.pathname === "/permissions/ui.js") {
-    return new Response(script, { headers: headers("text/javascript; charset=utf-8") })
+    return new Response(clientScript, { headers: headers("text/javascript; charset=utf-8") })
   }
   if (!env?.EVENT_BUS && url.pathname === "/permissions/events") {
     return new Response("event bus binding missing\n", { status: 500 })
@@ -347,20 +330,26 @@ export function servePermissionUi(request, env) {
 export class EventBus extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env)
-    this.events = []
     this.clients = new Set()
+    this.resources = new Map()
   }
 
   async fetch(request) {
     const url = new URL(request.url)
     if (request.method === "POST" && url.pathname === "/permission") {
       const permission = await request.json()
-      this.broadcast("permission", permissionEvent(permission))
+      const resource = permissionResource(permission, this.resources.get(permissionResourceId(permission.app ?? "monkeypaw", permission)))
+      this.resources.set(resource.id, resource)
+      this.broadcast("resource", resource)
       return Response.json(permissionResponse(permission))
     }
     if (request.method === "POST" && url.pathname === "/publish") {
       const payload = await request.json()
-      this.broadcast(payload.type, payload.event)
+      if (payload.event?.permission) {
+        const resource = permissionResource(payload.event, this.resources.get(permissionResourceId(payload.event.app ?? "monkeypaw", payload.event)))
+        this.resources.set(resource.id, resource)
+        this.broadcast("resource", resource)
+      }
       return new Response(null, { status: 204 })
     }
     if (request.method === "GET" && url.pathname === "/events") return this.eventStream(request)
@@ -369,8 +358,6 @@ export class EventBus extends DurableObject {
 
   broadcast(type, event) {
     const chunk = sse(type, event)
-    this.events.push({ type, event })
-    if (this.events.length > 100) this.events.shift()
     this.clients.forEach((client) => this.sendClient(client, chunk))
   }
 
@@ -420,7 +407,7 @@ export class EventBus extends DurableObject {
         request.signal.addEventListener("abort", client.abort, { once: true })
         this.sendClient(client, encoder.encode("retry: 5000\n\n"))
         this.sendClient(client, sse("ready", { ok: true }))
-        this.events.forEach((entry) => this.sendClient(client, sse(entry.type, entry.event)))
+        this.resources.forEach((resource) => this.sendClient(client, sse("resource", resource)))
         client.heartbeat = setInterval(() => {
           this.sendClient(client, encoder.encode(": ping\n\n"))
         }, 15000)

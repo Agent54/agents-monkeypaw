@@ -34,7 +34,11 @@ cp /mitm-ca/workerd-proxy-key.pem /app/workerd-proxy-key.pem
 cp /mitm-ca/workerd-proxy-cert.pem /app/workerd-proxy-cert.pem
 
 umask 000
-exec workerd serve /app/main.capnp config --experimental \
+set -- workerd serve /app/main.capnp config --experimental
+if [ "${WORKERD_WATCH:-true}" = "true" ]; then
+  set -- "$@" --watch
+fi
+exec "$@" \
   --socket-addr internalBroker=unix:/sockets/internal/permission-broker.sock \
   --socket-addr externalHttp=unix:/sockets/external/debug-http.sock \
   --socket-addr httpProxy=0.0.0.0:8080 \

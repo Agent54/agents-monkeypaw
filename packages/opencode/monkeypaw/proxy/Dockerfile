@@ -23,7 +23,7 @@ RUN set -euo pipefail; \
 
 WORKDIR /app
 
-COPY packages/opencode/monkeypaw/proxy/main.capnp packages/opencode/monkeypaw/proxy/main.js packages/opencode/monkeypaw/proxy/ui.js /app/
+COPY packages/opencode/monkeypaw/proxy/main.capnp packages/opencode/monkeypaw/proxy/main.js packages/opencode/monkeypaw/proxy/ui.js packages/opencode/monkeypaw/proxy/client.js /app/
 COPY --chmod=755 packages/opencode/monkeypaw/proxy/entrypoint.sh /usr/local/bin/proxy-entrypoint.sh
 
 CMD ["/usr/local/bin/proxy-entrypoint.sh"]

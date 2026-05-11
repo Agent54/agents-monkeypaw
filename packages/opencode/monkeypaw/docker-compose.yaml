@@ -22,6 +22,20 @@ services:
     build:
       context: ../../..
       dockerfile: packages/opencode/monkeypaw/proxy/Dockerfile
+    develop:
+      watch:
+        - action: sync
+          path: proxy/main.capnp
+          target: /app/main.capnp
+        - action: sync
+          path: proxy/main.js
+          target: /app/main.js
+        - action: sync
+          path: proxy/ui.js
+          target: /app/ui.js
+        - action: sync
+          path: proxy/client.js
+          target: /app/client.js
     healthcheck:
       test:
         - CMD-SHELL

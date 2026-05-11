@@ -48,25 +48,12 @@ function jsonLine(value) {
   return JSON.stringify(stableValue(value))
 }
 
-function shortTimestamp(value) {
-  if (!value) return "-"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value)
-  return date.toISOString().replace("T", " ").replace("Z", "")
-}
-
-function permissionValue(request) {
-  if (typeof request.value === "string") return request.value
-  if (request.value === null) return "-"
-  if (request.value === undefined) return "-"
-  return compactJson(request.value)
-}
-
-function summarizePermissionLog(request) {
-  const id = request.id ?? "-"
-  const timestamp = shortTimestamp(request.datetime)
-  const permission = request.permission ?? "permission"
-  return `${id}: ${timestamp}, ${permission}: ${permissionValue(request)}`
+function appIdentity(request) {
+  if (!["hello", "identity"].includes(request.type)) return
+  if (typeof request.app !== "string") return
+  const app = request.app.trim()
+  if (!app) return
+  return clip(app, 80)
 }
 
 function concatBytes(left, right) {
@@ -125,6 +112,7 @@ async function* readLines(readable) {
 async function handlePermissionBrokerSession(socket, env) {
   const sessionId = nextSessionId++
   const writer = socket.writable.getWriter()
+  let app = "monkeypaw"
 
   try {
     for await (const line of readLines(socket.readable)) {
@@ -136,11 +124,18 @@ async function handlePermissionBrokerSession(socket, env) {
         throw error
       }
 
+      const identity = appIdentity(request)
+      if (identity) {
+        app = identity
+        log(`permission-broker session=${sessionId} app=${app}`)
+        continue
+      }
+
+      request.app = request.app ?? app
       const response = await decidePermission(env, request).catch((error) => {
         log("permission decision failed", error?.stack ?? String(error))
         return { id: request.id, result: "allow" }
       })
-      console.log(`[permission-broker] ${summarizePermissionLog(request)}`)
 
       try {
         await writeLine(writer, response)

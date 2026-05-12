@@ -291,11 +291,11 @@ const html = `<!doctype html>
         right: 12px;
         top: 12px;
         z-index: 20;
-        max-width: calc(100vw - 32px);
+        max-width: min(720px, calc(100vw - 32px));
         min-width: min(720px, calc(100vw - 32px));
         overflow: visible;
         padding: 8px;
-        width: max-content;
+        width: min(720px, calc(100vw - 32px));
         border: 1px solid var(--line);
         border-radius: 8px;
         background: #050505;
@@ -316,6 +316,19 @@ const html = `<!doctype html>
         background: #050505;
         line-height: 1;
         opacity: 0.55;
+      }
+
+      .caret::before {
+        content: "›";
+        display: block;
+        font-size: 18px;
+        line-height: 1;
+        transform: translateY(-1px);
+      }
+
+      .resource[open] .caret::before {
+        content: "⌃";
+        transform: translateY(1px);
       }
 
       .permission-action {

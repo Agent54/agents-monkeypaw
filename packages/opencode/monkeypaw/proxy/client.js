@@ -80,7 +80,7 @@ function createRow(resource) {
   const row = document.createElement("details")
   row.className = "resource"
   row.innerHTML = `<summary tabindex="-1">
-    <button class="caret" type="button" data-action="toggle-open" title="toggle details">›</button>
+    <button class="caret" type="button" data-action="toggle-open" title="show details" aria-label="show details"></button>
     <div class="meta">
       <span class="pill" data-field="permission"></span>
       <span data-field="app"></span>
@@ -127,7 +127,7 @@ function updateRow(row, resource) {
   row.querySelector('[data-field="value"]').textContent = resource.valueText
   row.querySelector('[data-field="rules"]').textContent = rulesText(resource)
   renderPermissionControls(row, resource)
-  setActionButton(row, "toggle-open", row.open ? "⌄" : "›", row.open ? "Hide details" : "Show details")
+  updateCaret(row)
   setControlsDisabled(row, busy.has(resource.id))
   if (row.open) row.querySelector("pre").textContent = JSON.stringify(resource, null, 2)
 }
@@ -267,6 +267,12 @@ function setActionButton(row, action, text, title) {
   const button = row.querySelector(`[data-action="${action}"]`)
   button.textContent = text
   button.title = title
+}
+
+function updateCaret(row) {
+  const button = row.querySelector('[data-action="toggle-open"]')
+  button.title = row.open ? "hide details" : "show details"
+  button.ariaLabel = button.title
 }
 
 function permissionLabel(resource) {
@@ -457,7 +463,7 @@ resources.addEventListener("click", (event) => {
   if (!entry) return
   if (action === "toggle-open") {
     row.open = !row.open
-    setActionButton(row, "toggle-open", row.open ? "⌄" : "›", row.open ? "Hide details" : "Show details")
+    updateCaret(row)
     if (row.open) row.querySelector("pre").textContent = JSON.stringify(entry.resource, null, 2)
     return
   }
@@ -510,6 +516,7 @@ function setControlsDisabled(row, isBusy) {
 
 resources.addEventListener("toggle", (event) => {
   if (!event.target.matches(".resource")) return
+  updateCaret(event.target)
   if (!event.target.open) return
   const entry = [...state.values()].find((item) => item.row === event.target)
   if (entry) event.target.querySelector("pre").textContent = JSON.stringify(entry.resource, null, 2)

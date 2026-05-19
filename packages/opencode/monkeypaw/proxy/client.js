@@ -182,24 +182,62 @@ function segmentPatterns(resource) {
 }
 
 function envSegmentPatterns(value) {
-  const parts = value.split("_").filter(Boolean)
-  if (!parts.length) return wordSegmentPatterns(value)
-  return [...parts.map((part, index) => ({
-    empty: false,
-    exact: parts.slice(0, index + 1).join("_"),
-    label: part,
-    separator: index === 0 ? "" : "_",
-    star: [...parts.slice(0, index), "*"].join("_"),
-    title: parts.slice(0, index + 1).join("_"),
-  })), {
+  const parsed = parseEnvSegments(value)
+  if (!parsed.parts.length) {
+    return [{
+      empty: false,
+      exact: value,
+      label: value,
+      separator: "",
+      star: "*",
+      title: value,
+    }, {
+      empty: true,
+      exact: value,
+      label: "*",
+      separator: "",
+      star: `${value}*`,
+      title: `${value}*`,
+      trailing: true,
+    }]
+  }
+  let prefix = ""
+  return [...parsed.parts.map((part, index) => {
+    const exactPrefix = `${prefix}${part.separator}${part.label}`
+    const exact = index === parsed.parts.length - 1 ? `${exactPrefix}${parsed.trailingSeparator}` : exactPrefix
+    const pattern = {
+      empty: false,
+      exact,
+      label: part.label,
+      separator: part.separator,
+      star: `${prefix}${part.separator}*`,
+      title: exact,
+    }
+    prefix = exactPrefix
+    return pattern
+  }), {
     empty: true,
     exact: value,
     label: "*",
-    separator: "_",
-    star: `${value}_*`,
-    title: `${value}_*`,
+    separator: parsed.trailingSeparator || "_",
+    star: `${prefix}${parsed.trailingSeparator || "_"}*`,
+    title: `${prefix}${parsed.trailingSeparator || "_"}*`,
     trailing: true,
   }]
+}
+
+function parseEnvSegments(value) {
+  const parts = []
+  let separator = ""
+  for (const match of value.matchAll(/_+|[^_]+/g)) {
+    if (match[0].startsWith("_")) {
+      separator += match[0]
+      continue
+    }
+    parts.push({ label: match[0], separator })
+    separator = ""
+  }
+  return { parts, trailingSeparator: separator }
 }
 
 function pathSegmentPatterns(value) {

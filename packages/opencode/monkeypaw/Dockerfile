@@ -132,8 +132,11 @@ RUN groupadd --system opencode \
 COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/deno.jsonc /home/opencode/app/deno.jsonc
 COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/deno-shims /home/opencode/app/deno-shims
 COPY --from=deno-build --chown=opencode:opencode /src/packages/opencode/dist/deno /home/opencode/app/dist/deno
-COPY --from=deno-build --chown=opencode:opencode /src/packages/plugin/package.json /home/opencode/app/packages/plugin/package.json
-COPY --from=deno-build --chown=opencode:opencode /src/packages/plugin/src /home/opencode/app/packages/plugin/src
+COPY --chown=opencode:opencode packages/plugin/package.json packages/plugin/tsconfig.json /home/opencode/app/packages/plugin/
+COPY --chown=opencode:opencode packages/plugin/src /home/opencode/app/packages/plugin/src
+
+RUN test -f /home/opencode/app/packages/plugin/src/index.ts \
+    && test -f /home/opencode/app/packages/plugin/src/tool.ts
 
 RUN chmod -R a+rX /home/opencode/app
 

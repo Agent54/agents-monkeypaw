@@ -103,7 +103,7 @@ services:
       # GIT_CONFIG_KEY_0: "safe.directory"
       # GIT_CONFIG_VALUE_0: "*"
       NO_PROXY: "agent,proxy,mcp-everything,localhost,127.0.0.1"
-      OPENCODE_CONFIG_DIR: "/stacks/agents/data/conf"
+      OPENCODE_CONFIG_DIR: "/stacks/agents/opencode/packages/opencode/monkeypaw/conf/opencode"
       OPENCODE_MOUNT_ROOT: "/stacks"
       OPENCODE_TEST_HOME: "/stacks"
       OPENCODE_WORKSPACE_ROOT: "/stacks/agents/workspaces"
